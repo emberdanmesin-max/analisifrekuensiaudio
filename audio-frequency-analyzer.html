@@ -1,0 +1,3095 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spektrum Audio — Analisis Frekuensi</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#08090d; --surface:#0f1118; --card:#13161f; --border:#1e2333;
+  --accent:#00f5c4; --accent2:#7b5cfa; --accent3:#ff5c7a;
+  --text:#e8ecf5; --muted:#5a6080; --glow:rgba(0,245,196,0.15);
+  /* harmonic colours */
+  --fund:#ffd700; --harm:#a889ff; --other:var(--accent);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;
+  background-image:linear-gradient(rgba(0,245,196,.03)1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,245,196,.03)1px,transparent 1px);
+  background-size:40px 40px;pointer-events:none;z-index:0}
+.container{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:40px 24px 80px}
+
+/* ── Header ── */
+header{margin-bottom:40px}
+.tag{display:inline-block;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:3px;
+  color:var(--accent);text-transform:uppercase;border:1px solid rgba(0,245,196,.3);
+  padding:4px 12px;border-radius:2px;margin-bottom:16px}
+h1{font-size:clamp(30px,6vw,52px);font-weight:800;line-height:1.05;letter-spacing:-1px}
+h1 span{color:var(--accent);position:relative}
+h1 span::after{content:'';position:absolute;bottom:4px;left:0;right:0;height:3px;
+  background:var(--accent);opacity:.4;border-radius:2px}
+.subtitle{margin-top:12px;color:var(--muted);font-size:15px}
+
+/* ── Tabs ── */
+.source-tabs{display:flex;gap:8px;margin-bottom:20px}
+.tab-btn{display:flex;align-items:center;gap:8px;padding:11px 22px;border-radius:8px;
+  border:1px solid var(--border);background:var(--card);color:var(--muted);
+  font-family:'Syne',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}
+.tab-btn svg{width:15px;height:15px;flex-shrink:0;fill:none;stroke:currentColor;
+  stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.tab-btn:hover{border-color:var(--accent);color:var(--text)}
+.tab-file.active{border-color:var(--accent)!important;color:var(--accent)!important;background:rgba(0,245,196,.07)!important}
+.tab-rec.active{border-color:var(--accent3)!important;color:var(--accent3)!important;background:rgba(255,92,122,.07)!important}
+.tab-json.active{border-color:var(--accent2)!important;color:var(--accent2)!important;background:rgba(123,92,250,.07)!important}
+.panel{display:none}.panel.active{display:block}
+
+/* ── JSON load panel ── */
+.json-drop{border:2px dashed var(--border);border-radius:12px;padding:52px 32px;
+  text-align:center;cursor:pointer;transition:all .3s;background:var(--card);
+  position:relative;overflow:hidden;margin-bottom:20px}
+.json-drop::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 50% 0%,rgba(123,92,250,.07) 0%,transparent 70%);
+  opacity:0;transition:opacity .3s}
+.json-drop:hover,.json-drop.drag-over{border-color:var(--accent2);box-shadow:0 0 40px rgba(123,92,250,.2)}
+.json-drop:hover::before,.json-drop.drag-over::before{opacity:1}
+.json-drop-icon{width:52px;height:52px;margin:0 auto 18px;border:2px solid var(--border);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;transition:border-color .3s}
+.json-drop:hover .json-drop-icon{border-color:var(--accent2)}
+.json-drop-icon svg{width:22px;height:22px;fill:none;stroke:var(--muted);stroke-width:1.5;
+  stroke-linecap:round;stroke-linejoin:round;transition:stroke .3s}
+.json-drop:hover .json-drop-icon svg{stroke:var(--accent2)}
+.json-drop-title{font-size:17px;font-weight:600;margin-bottom:8px}
+.json-drop-sub{font-size:12px;color:var(--muted);font-family:'Space Mono',monospace}
+#jsonFileInput{display:none}
+
+/* JSON history list */
+.json-history{display:none;flex-direction:column;gap:8px;margin-top:4px}
+.json-history.show{display:flex}
+.json-hist-item{display:flex;align-items:center;gap:12px;background:var(--surface);
+  border:1px solid var(--border);border-radius:8px;padding:11px 14px;cursor:pointer;
+  transition:all .2s}
+.json-hist-item:hover{border-color:var(--accent2);background:rgba(123,92,250,.06)}
+.jhi-icon{width:32px;height:32px;border-radius:6px;background:rgba(123,92,250,.12);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.jhi-icon svg{width:16px;height:16px;fill:none;stroke:var(--accent2);stroke-width:1.5;
+  stroke-linecap:round;stroke-linejoin:round}
+.jhi-details{flex:1;min-width:0}
+.jhi-name{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jhi-meta{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:2px}
+.jhi-remove{background:none;border:none;cursor:pointer;padding:4px;color:var(--muted);transition:color .2s;flex-shrink:0}
+.jhi-remove:hover{color:var(--accent3)}
+.jhi-remove svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* ── Upload Zone ── */
+.upload-zone{border:2px dashed var(--border);border-radius:12px;padding:52px 32px;
+  text-align:center;cursor:pointer;transition:all .3s;background:var(--card);
+  position:relative;overflow:hidden;margin-bottom:20px}
+.upload-zone::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 50% 0%,rgba(0,245,196,.07) 0%,transparent 70%);
+  opacity:0;transition:opacity .3s}
+.upload-zone:hover,.upload-zone.drag-over{border-color:var(--accent);box-shadow:0 0 40px var(--glow)}
+.upload-zone:hover::before,.upload-zone.drag-over::before{opacity:1}
+.upload-icon{width:52px;height:52px;margin:0 auto 18px;border:2px solid var(--border);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;transition:border-color .3s}
+.upload-zone:hover .upload-icon{border-color:var(--accent)}
+.upload-icon svg{width:22px;height:22px;fill:none;stroke:var(--muted);stroke-width:1.5;
+  stroke-linecap:round;stroke-linejoin:round;transition:stroke .3s}
+.upload-zone:hover .upload-icon svg{stroke:var(--accent)}
+.upload-title{font-size:17px;font-weight:600;margin-bottom:8px}
+.upload-sub{font-size:12px;color:var(--muted);font-family:'Space Mono',monospace}
+#fileInput{display:none}
+
+/* ── Record Panel ── */
+.rec-panel-card{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:32px 28px;margin-bottom:20px;text-align:center;position:relative;overflow:hidden}
+.rec-panel-card::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 50% 100%,rgba(255,92,122,.06) 0%,transparent 60%);pointer-events:none}
+.live-viz{display:flex;align-items:flex-end;justify-content:center;gap:3px;height:56px;margin-bottom:28px}
+.viz-bar{width:4px;border-radius:2px;background:var(--border);
+  transition:height .08s ease,background .3s;min-height:4px}
+.recording .viz-bar{background:var(--accent3)}
+.rec-btn-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center;margin-bottom:24px}
+.rec-pulse{position:absolute;inset:-12px;border-radius:50%;background:rgba(255,92,122,.22);
+  animation:none;pointer-events:none}
+.recording .rec-pulse{animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(.85);opacity:.7}50%{transform:scale(1.15);opacity:.2}}
+#recBtn{width:80px;height:80px;border-radius:50%;border:3px solid var(--border);
+  background:var(--surface);cursor:pointer;transition:all .25s;
+  display:flex;align-items:center;justify-content:center;position:relative;z-index:1}
+#recBtn:hover{border-color:var(--accent3);box-shadow:0 0 32px rgba(255,92,122,.25)}
+#recBtn .icon-mic{display:block}
+#recBtn .icon-stop{display:none}
+#recBtn.recording{background:var(--accent3);border-color:var(--accent3);box-shadow:0 0 40px rgba(255,92,122,.35)}
+#recBtn.recording .icon-mic{display:none}
+#recBtn.recording .icon-stop{display:block}
+#recBtn svg{width:28px;height:28px;fill:none;stroke:var(--muted);stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;transition:stroke .2s}
+#recBtn:hover svg,#recBtn.recording svg{stroke:#fff}
+.rec-status{font-family:'Space Mono',monospace;font-size:13px;color:var(--muted);
+  margin-bottom:10px;min-height:20px;transition:color .3s}
+.rec-status.active{color:var(--accent3)}
+.rec-timer{font-family:'Space Mono',monospace;font-size:32px;font-weight:700;
+  color:var(--text);letter-spacing:2px;margin-bottom:6px;min-height:44px}
+.rec-timer.active{color:var(--accent3)}
+.rec-hint{font-size:12px;color:var(--muted);line-height:1.7;max-width:400px;margin:0 auto}
+.rec-hint b{color:var(--text)}
+
+/* ── Source info bar ── */
+.source-info{display:none;align-items:center;gap:14px;background:var(--card);
+  border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:24px}
+.source-info.show{display:flex}
+.src-icon{width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.src-icon svg{width:18px;height:18px;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.src-file{background:rgba(0,245,196,.1)}.src-file svg{stroke:var(--accent)}
+.src-rec{background:rgba(255,92,122,.1)}.src-rec svg{stroke:var(--accent3)}
+.src-json{background:rgba(123,92,250,.1)}.src-json svg{stroke:var(--accent2)}
+.src-details{flex:1;min-width:0}
+.src-name{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.src-meta{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:3px}
+.btn-src-remove{background:none;border:none;cursor:pointer;padding:4px;color:var(--muted);transition:color .2s}
+.btn-src-remove:hover{color:var(--accent3)}
+.btn-src-remove svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* ── Waveform ── */
+.waveform-wrap{display:none;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:18px;margin-bottom:24px}
+.waveform-wrap.show{display:block}
+.section-label{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--muted);margin-bottom:12px;
+  display:flex;align-items:center;gap:10px}
+.section-label::after{content:'';flex:1;height:1px;background:var(--border)}
+canvas{width:100%;border-radius:6px;display:block}
+#waveformCanvas{height:80px}
+#spectrumCanvas{height:220px}
+.range-indicator{font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);
+  margin-top:8px;text-align:center;opacity:0;transition:opacity .3s}
+.range-indicator.show{opacity:1}
+
+/* ── Time controls ── */
+.controls-grid{display:grid;grid-template-columns:1fr 1fr auto;gap:14px;
+  margin-bottom:24px;align-items:end}
+@media(max-width:600px){.controls-grid{grid-template-columns:1fr 1fr}.btn-analyze{grid-column:1/-1}}
+.field label{display:block;font-size:11px;font-family:'Space Mono',monospace;
+  letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:8px}
+.field input[type="number"]{width:100%;background:var(--card);border:1px solid var(--border);
+  border-radius:8px;padding:12px 16px;color:var(--text);font-family:'Space Mono',monospace;
+  font-size:15px;outline:none;transition:border-color .2s,box-shadow .2s;-moz-appearance:textfield}
+.field input::-webkit-outer-spin-button,.field input::-webkit-inner-spin-button{-webkit-appearance:none}
+.field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,245,196,.1)}
+.btn-analyze{background:var(--accent);color:#08090d;border:none;border-radius:8px;
+  padding:12px 28px;font-family:'Syne',sans-serif;font-size:15px;font-weight:700;
+  cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn-analyze:hover:not(:disabled){background:#2fffd4;box-shadow:0 0 30px rgba(0,245,196,.4);transform:translateY(-1px)}
+.btn-analyze:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Error / Loading ── */
+.error-msg{display:none;align-items:flex-start;gap:10px;background:rgba(255,92,122,.08);
+  border:1px solid rgba(255,92,122,.3);border-radius:10px;padding:14px 18px;
+  margin-bottom:20px;font-size:12px;color:var(--accent3);font-family:'Space Mono',monospace;line-height:1.6}
+.error-msg.show{display:flex}
+.error-msg svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;margin-top:2px}
+.loading{display:none;flex-direction:column;align-items:center;gap:14px;padding:40px}
+.loading.show{display:flex}
+.spinner{width:36px;height:36px;border:2px solid var(--border);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-family:'Space Mono',monospace;font-size:12px;color:var(--muted)}
+
+/* ══════════════════════════════
+   RESULTS
+══════════════════════════════ */
+.results-wrap{display:none}.results-wrap.show{display:block}
+.spectrum-card{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:18px;margin-bottom:18px}
+
+/* stats row — 4 cards now (F0 added) */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+@media(max-width:600px){.stats-row{grid-template-columns:1fr 1fr}}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:14px;text-align:center}
+.stat-value{font-family:'Space Mono',monospace;font-size:18px;font-weight:700;
+  color:var(--accent);line-height:1;margin-bottom:5px}
+.stat-value.fund-color{color:var(--fund)}
+.stat-label{font-size:10px;letter-spacing:1px;text-transform:uppercase;
+  color:var(--muted);font-family:'Space Mono',monospace}
+
+/* band grid */
+.band-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+@media(max-width:600px){.band-grid{grid-template-columns:1fr 1fr}}
+.band-card{background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:14px 12px;text-align:center}
+.band-name{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);
+  font-family:'Space Mono',monospace;margin-bottom:6px}
+.band-range{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:8px;opacity:.6}
+.band-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:8px}
+.band-fill{height:100%;border-radius:2px}
+.band-bass .band-fill{background:var(--accent3)}.band-mid .band-fill{background:var(--accent)}
+.band-high .band-fill{background:var(--accent2)}.band-air .band-fill{background:#ffcc44}
+.band-pct{font-family:'Space Mono',monospace;font-size:17px;font-weight:700}
+.band-bass .band-pct{color:var(--accent3)}.band-mid .band-pct{color:var(--accent)}
+.band-high .band-pct{color:var(--accent2)}.band-air .band-pct{color:#ffcc44}
+
+/* ── Frequency table ── */
+.freq-table-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  overflow:hidden;margin-bottom:18px}
+.table-header{padding:14px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.table-title{font-size:14px;font-weight:600}
+.peak-count{font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);
+  background:rgba(0,245,196,.1);padding:3px 10px;border-radius:20px}
+
+/* legend */
+.legend-row{display:flex;gap:14px;flex-wrap:wrap;padding:10px 18px;
+  border-bottom:1px solid var(--border);background:var(--surface)}
+.leg{display:flex;align-items:center;gap:6px;font-family:'Space Mono',monospace;
+  font-size:10px;color:var(--muted)}
+.leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.leg-fund{background:var(--fund);box-shadow:0 0 5px var(--fund)}
+.leg-harm{background:var(--harm);box-shadow:0 0 5px var(--harm)}
+.leg-other{background:var(--muted)}
+
+/* playback controls bar */
+.playback-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:10px 18px;border-bottom:1px solid var(--border);background:var(--surface)}
+.pb-label{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
+.pb-slider{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;
+  background:var(--border);outline:none;cursor:pointer;width:80px}
+.pb-slider::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;
+  border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--bg)}
+.pb-val{font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);min-width:30px}
+.pb-sep{width:1px;height:18px;background:var(--border)}
+
+table{width:100%;border-collapse:collapse}
+thead tr{background:var(--surface)}
+th{padding:9px 14px;text-align:left;font-family:'Space Mono',monospace;font-size:10px;
+  letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:400;white-space:nowrap}
+td{padding:9px 14px;font-family:'Space Mono',monospace;font-size:12px;
+  border-bottom:1px solid rgba(30,35,51,.5);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+
+/* row tinting */
+tr.row-fund td{background:rgba(255,215,0,.06)}
+tr.row-harm td{background:rgba(168,137,255,.05)}
+tr.row-other td{background:rgba(255,255,255,.015)}
+tr.row-fund:hover td{background:rgba(255,215,0,.11)}
+tr.row-harm:hover td{background:rgba(168,137,255,.1)}
+tr.row-other:hover td{background:rgba(255,255,255,.03)}
+
+.freq-val{font-weight:700}
+tr.row-fund  .freq-val{color:var(--fund)}
+tr.row-harm  .freq-val{color:var(--harm)}
+tr.row-other .freq-val{color:var(--accent)}
+
+/* type badge */
+.type-badge{display:inline-flex;align-items:center;gap:5px;border-radius:5px;
+  padding:3px 9px;font-size:10px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+.badge-fund{background:rgba(255,215,0,.13);color:var(--fund);border:1px solid rgba(255,215,0,.3)}
+.badge-harm{background:rgba(168,137,255,.13);color:var(--harm);border:1px solid rgba(168,137,255,.3)}
+.badge-other{background:rgba(90,96,128,.1);color:var(--muted);border:1px solid rgba(90,96,128,.2)}
+.badge-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.badge-fund .badge-dot{background:var(--fund)}
+.badge-harm .badge-dot{background:var(--harm)}
+.badge-other .badge-dot{background:var(--muted)}
+
+.note-badge{display:inline-block;background:rgba(123,92,250,.12);color:#a889ff;
+  border:1px solid rgba(123,92,250,.28);border-radius:4px;padding:2px 7px;font-size:10px}
+.bar-cell{width:110px}
+.bar-track{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent2),var(--accent))}
+tr.row-fund .bar-fill{background:linear-gradient(90deg,#e07000,var(--fund))}
+tr.row-harm .bar-fill{background:linear-gradient(90deg,#5c3fcc,var(--harm))}
+
+/* play button */
+.play-btn{background:none;border:1px solid var(--border);border-radius:6px;
+  padding:5px 10px;cursor:pointer;color:var(--muted);font-family:'Space Mono',monospace;
+  font-size:10px;transition:all .18s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.play-btn svg{width:9px;height:9px;fill:currentColor;flex-shrink:0}
+.play-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,245,196,.07)}
+.play-btn.playing{border-color:var(--accent3);color:var(--accent3);
+  background:rgba(255,92,122,.1);animation:playpulse .9s ease-in-out infinite}
+@keyframes playpulse{0%,100%{box-shadow:0 0 0 0 rgba(255,92,122,.4)}50%{box-shadow:0 0 0 4px rgba(255,92,122,0)}}
+tr.row-fund .play-btn:hover{border-color:var(--fund);color:var(--fund);background:rgba(255,215,0,.07)}
+tr.row-fund .play-btn.playing{border-color:var(--fund);color:var(--fund);background:rgba(255,215,0,.1)}
+tr.row-harm .play-btn:hover{border-color:var(--harm);color:var(--harm);background:rgba(168,137,255,.07)}
+tr.row-harm .play-btn.playing{border-color:var(--harm);color:var(--harm);background:rgba(168,137,255,.1)}
+
+/* ── Spectrogram ── */
+.spectrogram-card{background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:18px;margin-bottom:18px}
+.stft-controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  margin-bottom:12px}
+.stft-ctrl-group{display:flex;align-items:center;gap:8px}
+.stft-ctrl-group label{font-family:'Space Mono',monospace;font-size:10px;
+  color:var(--muted);text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
+.stft-select{background:var(--surface);border:1px solid var(--border);border-radius:6px;
+  padding:5px 10px;color:var(--text);font-family:'Space Mono',monospace;font-size:11px;
+  outline:none;cursor:pointer}
+.stft-select:focus{border-color:var(--accent)}
+#spectrogramCanvas{height:200px;cursor:crosshair;image-rendering:pixelated}
+.sgram-legend{display:flex;align-items:center;gap:8px;margin-top:8px}
+.sgram-grad{width:120px;height:8px;border-radius:4px;flex-shrink:0;
+  background:linear-gradient(90deg,#000,#0a1628,#1a2a6c,#2563eb,#00c8ff,#00f5c4,#ffff00,#ff8800,#ff0000,#fff)}
+.sgram-grad-label{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted)}
+.sgram-tooltip{font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);
+  margin-left:auto;min-height:16px;transition:opacity .15s}
+/* slide detection badge */
+.slide-badge{display:inline-flex;align-items:center;gap:6px;border-radius:6px;
+  padding:4px 12px;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;
+  margin-top:10px}
+.slide-detected{background:rgba(255,140,0,.12);color:#ff9d44;border:1px solid rgba(255,140,0,.3)}
+.slide-none{background:rgba(0,245,196,.08);color:var(--accent);border:1px solid rgba(0,245,196,.2)}
+.slide-badge svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+.slide-list{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+.slide-chip{font-family:'Space Mono',monospace;font-size:10px;
+  background:rgba(255,140,0,.08);color:#ffb86c;border:1px solid rgba(255,140,0,.2);
+  border-radius:4px;padding:3px 9px}
+
+/* ── Chord Builder ── */
+.chord-bar{display:none;flex-direction:column;gap:10px;
+  padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface)}
+.chord-bar.show{display:flex}
+.chord-bar-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.chord-title{font-family:'Space Mono',monospace;font-size:11px;color:var(--accent2);
+  text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
+.chord-slots{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+.chord-slot{display:inline-flex;align-items:center;gap:5px;
+  background:var(--card);border:1px solid var(--border);border-radius:6px;
+  padding:4px 10px;font-family:'Space Mono',monospace;font-size:11px;
+  transition:all .2s;white-space:nowrap}
+.chord-slot.filled{border-color:var(--accent2);color:var(--accent2);background:rgba(123,92,250,.1)}
+.chord-slot.fund-slot{border-color:var(--fund);color:var(--fund);background:rgba(255,215,0,.08)}
+.chord-slot.harm-slot{border-color:var(--harm);color:var(--harm);background:rgba(168,137,255,.08)}
+.chord-slot-remove{background:none;border:none;cursor:pointer;padding:0 0 0 4px;
+  color:inherit;opacity:.6;font-size:13px;line-height:1;transition:opacity .2s}
+.chord-slot-remove:hover{opacity:1}
+.chord-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn-chord-play{display:inline-flex;align-items:center;gap:7px;
+  background:var(--accent2);color:#fff;border:none;border-radius:7px;
+  padding:8px 18px;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;
+  cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn-chord-play:hover:not(:disabled){background:#9b7dff;box-shadow:0 0 20px rgba(123,92,250,.4);transform:translateY(-1px)}
+.btn-chord-play:disabled{opacity:.4;cursor:not-allowed}
+.btn-chord-play.playing{background:var(--accent3);animation:playpulse .9s ease-in-out infinite}
+.btn-chord-clear{display:inline-flex;align-items:center;gap:5px;background:none;
+  border:1px solid var(--border);border-radius:7px;padding:7px 13px;
+  font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);
+  cursor:pointer;transition:all .2s}
+.btn-chord-clear:hover{border-color:var(--accent3);color:var(--accent3)}
+/* export wav button */
+.btn-chord-export{display:inline-flex;align-items:center;gap:7px;background:none;
+  border:1px solid var(--border);border-radius:7px;padding:7px 13px;
+  font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);
+  cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn-chord-export:hover:not(:disabled){border-color:var(--accent);color:var(--accent);background:rgba(0,245,196,.06)}
+.btn-chord-export:disabled{opacity:.3;cursor:not-allowed}
+.btn-chord-export.done{border-color:var(--accent);color:var(--accent)}
+.btn-chord-export svg{width:12px;height:12px;fill:none;stroke:currentColor;
+  stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+/* export status row */
+.chord-export-status{display:none;gap:8px;flex-wrap:wrap;margin-top:2px}
+.chord-export-status.show{display:flex}
+.export-file-chip{display:inline-flex;align-items:center;gap:6px;
+  background:rgba(0,245,196,.07);border:1px solid rgba(0,245,196,.2);
+  border-radius:5px;padding:3px 10px;font-family:'Space Mono',monospace;
+  font-size:10px;color:var(--accent)}
+.export-file-chip svg{width:11px;height:11px;fill:none;stroke:currentColor;
+  stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.chord-hint{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);line-height:1.5}
+.chord-hint b{color:var(--text)}
+/* checkbox in table */
+.chord-check{width:16px;height:16px;accent-color:var(--accent2);cursor:pointer;flex-shrink:0}
+
+/* ══════════════════════════════
+   MELODY KEYBOARD
+══════════════════════════════ */
+.melody-wrap{display:none;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;margin-bottom:18px}
+.melody-wrap.show{display:block}
+.melody-header{display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border)}
+.melody-title{font-size:14px;font-weight:600}
+.melody-rec-badge{display:inline-flex;align-items:center;gap:6px;
+  font-family:'Space Mono',monospace;font-size:11px;padding:4px 12px;
+  border-radius:20px;border:1px solid var(--border);color:var(--muted);
+  transition:all .3s}
+.melody-rec-badge.active{border-color:var(--accent3);color:var(--accent3);
+  background:rgba(255,92,122,.1)}
+.rec-dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.melody-rec-badge.active .rec-dot{animation:blink 1s ease-in-out infinite}
+
+/* key grid */
+.key-grid-wrap{padding:16px 18px;border-bottom:1px solid var(--border)}
+.key-grid{display:flex;flex-wrap:wrap;gap:6px}
+.piano-key{
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+  gap:3px;padding:8px 6px 10px;min-width:52px;
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  cursor:pointer;user-select:none;transition:all .12s;position:relative;
+  font-family:'Space Mono',monospace;}
+.piano-key:hover{border-color:var(--accent);background:rgba(0,245,196,.07);transform:translateY(-2px)}
+.piano-key.active{background:var(--accent)!important;border-color:var(--accent)!important;
+  transform:translateY(2px);box-shadow:0 0 18px rgba(0,245,196,.5)}
+.piano-key.active .key-freq,.piano-key.active .key-label,.piano-key.active .key-note{color:#08090d!important}
+.piano-key.fund-key{border-color:rgba(255,215,0,.4);background:rgba(255,215,0,.06)}
+.piano-key.fund-key:hover{background:rgba(255,215,0,.14);border-color:var(--fund)}
+.piano-key.fund-key.active{background:var(--fund)!important;border-color:var(--fund)!important;box-shadow:0 0 18px rgba(255,215,0,.5)}
+.piano-key.harm-key{border-color:rgba(168,137,255,.3);background:rgba(168,137,255,.05)}
+.piano-key.harm-key:hover{background:rgba(168,137,255,.12);border-color:var(--harm)}
+.piano-key.harm-key.active{background:var(--harm)!important;border-color:var(--harm)!important;box-shadow:0 0 18px rgba(168,137,255,.5)}
+.key-kb{font-size:16px;font-weight:700;color:var(--text);line-height:1}
+.key-freq{font-size:9px;color:var(--muted);letter-spacing:.3px}
+.key-note{font-size:9px;color:var(--accent2);opacity:.8}
+.key-label{font-size:9px;color:var(--muted);opacity:.6}
+
+/* melody controls */
+.melody-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:12px 18px;border-bottom:1px solid var(--border);background:var(--surface)}
+.btn-melody-rec{display:inline-flex;align-items:center;gap:7px;
+  background:var(--accent3);color:#fff;border:none;border-radius:7px;
+  padding:8px 16px;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;
+  cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn-melody-rec:hover{background:#ff7a92;box-shadow:0 0 20px rgba(255,92,122,.4)}
+.btn-melody-rec.recording{animation:playpulse .9s ease-in-out infinite}
+.btn-melody-stop{display:inline-flex;align-items:center;gap:7px;background:none;
+  border:1px solid var(--border);border-radius:7px;padding:7px 14px;
+  font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);
+  cursor:pointer;transition:all .2s}
+.btn-melody-stop:hover:not(:disabled){border-color:var(--accent3);color:var(--accent3)}
+.btn-melody-stop:disabled{opacity:.3;cursor:not-allowed}
+.btn-melody-export{display:inline-flex;align-items:center;gap:7px;background:none;
+  border:1px solid var(--border);border-radius:7px;padding:7px 14px;
+  font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);
+  cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn-melody-export:hover:not(:disabled){border-color:var(--accent);color:var(--accent);background:rgba(0,245,196,.06)}
+.btn-melody-export:disabled{opacity:.3;cursor:not-allowed}
+.btn-melody-export svg,.btn-melody-stop svg,.btn-melody-rec svg{
+  width:12px;height:12px;fill:none;stroke:currentColor;
+  stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.btn-melody-rec svg{fill:white;stroke:white}
+.melody-timer{font-family:'Space Mono',monospace;font-size:22px;font-weight:700;
+  color:var(--muted);letter-spacing:2px;min-width:70px;transition:color .3s}
+.melody-timer.active{color:var(--accent3)}
+
+/* note roll — visual playback strip */
+.note-roll{padding:0 18px 14px;overflow:hidden}
+.note-roll-label{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;margin-top:14px}
+.note-roll-track{position:relative;height:48px;background:var(--surface);
+  border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.note-pill{position:absolute;height:26px;top:11px;border-radius:4px;
+  display:flex;align-items:center;padding:0 6px;
+  font-family:'Space Mono',monospace;font-size:9px;font-weight:700;
+  white-space:nowrap;opacity:.9;transition:opacity .3s}
+
+/* ── Metronome ── */
+.metro-bar{display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:10px;padding:12px 18px;border-bottom:1px solid var(--border);
+  background:var(--surface)}
+.metro-left{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.btn-metro{display:inline-flex;align-items:center;gap:7px;background:none;
+  border:1px solid var(--border);border-radius:7px;padding:7px 14px;
+  font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--muted);
+  cursor:pointer;transition:all .2s}
+.btn-metro:hover{border-color:var(--accent);color:var(--accent)}
+.btn-metro.active{border-color:var(--accent);color:var(--accent);
+  background:rgba(0,245,196,.08);box-shadow:0 0 16px rgba(0,245,196,.2)}
+.btn-metro svg{width:16px;height:16px;flex-shrink:0}
+.metro-beat-row{display:flex;gap:5px}
+.metro-dot{width:12px;height:12px;border-radius:50%;background:var(--border);
+  transition:background .06s,box-shadow .06s}
+.metro-dot.beat-1{background:var(--accent);box-shadow:0 0 10px var(--accent)}
+.metro-dot.beat-n{background:var(--accent2);box-shadow:0 0 8px var(--accent2)}
+
+/* ── Piano Roll ── */
+.pr-section{border-top:1px solid var(--border);padding:16px 18px 20px}
+.pr-header{display:flex;align-items:flex-start;justify-content:space-between;
+  flex-wrap:wrap;gap:12px;margin-bottom:14px}
+.pr-canvas-wrap{display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.pr-freq-labels{display:flex;flex-direction:column;background:var(--surface);
+  border-right:1px solid var(--border);flex-shrink:0;width:68px;overflow:hidden}
+.pr-freq-label{display:flex;align-items:center;justify-content:flex-end;
+  padding-right:8px;font-family:'Space Mono',monospace;font-size:9px;
+  color:var(--muted);border-bottom:1px solid var(--border);flex-shrink:0;
+  cursor:pointer;transition:background .15s;white-space:nowrap}
+.pr-freq-label:hover{background:rgba(0,245,196,.07);color:var(--accent)}
+.pr-freq-label.fund-row{color:var(--fund)}
+.pr-freq-label.harm-row{color:var(--harm)}
+.pr-grid-wrap{position:relative;flex:1;overflow:hidden}
+#prCanvas{display:block;width:100%;cursor:crosshair}
+.pr-playhead{position:absolute;top:0;bottom:0;width:2px;
+  background:var(--accent3);box-shadow:0 0 6px var(--accent3);
+  pointer-events:none;z-index:5}
+
+/* audio player from JSON */
+.audio-player-bar{display:flex;align-items:center;gap:12px;padding:12px 18px;
+  background:var(--surface);border-bottom:1px solid var(--border)}
+.audio-player-bar audio{flex:1;height:32px;min-width:0;
+  filter:invert(1) hue-rotate(140deg) brightness(.85)}
+.audio-player-label{font-family:'Space Mono',monospace;font-size:10px;
+  color:var(--accent2);text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
+
+/* export button */
+.btn-export{display:inline-flex;align-items:center;gap:7px;background:none;
+  border:1px solid var(--border);border-radius:7px;padding:7px 14px;
+  color:var(--muted);font-family:'Space Mono',monospace;font-size:11px;
+  cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn-export svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.btn-export:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,245,196,.06)}
+.btn-export.done{border-color:var(--accent);color:var(--accent)}
+
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="tag">Audio Spectrum Analyzer</div>
+    <h1>Analisis <span>Frekuensi</span> Audio</h1>
+    <p class="subtitle">Upload file · Rekam langsung · Muat JSON — FFT · Fundamental · Harmonik · Play Sinus</p>
+  </header>
+
+  <!-- ── TABS ── -->
+  <div class="source-tabs">
+    <button class="tab-btn tab-file active" id="tabFile" onclick="switchTab('file')">
+      <svg viewBox="0 0 24 24"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12M8 8l4-4 4 4"/></svg>
+      Upload File
+    </button>
+    <button class="tab-btn tab-rec" id="tabRec" onclick="switchTab('rec')">
+      <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>
+      Rekam Suara
+    </button>
+    <button class="tab-btn tab-json" id="tabJson" onclick="switchTab('json')">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
+      Muat JSON
+    </button>
+  </div>
+
+  <!-- ── PANEL FILE ── -->
+  <div class="panel active" id="panelFile">
+    <div class="upload-zone" id="dropZone">
+      <input type="file" id="fileInput" accept="audio/*,video/*">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12M8 8l4-4 4 4"/></svg>
+      </div>
+      <div class="upload-title">Seret file ke sini</div>
+      <div class="upload-sub">WAV · MP3 · OGG · FLAC · AAC · M4A · MP4 · WebM</div>
+    </div>
+  </div>
+
+  <!-- ── PANEL JSON ── -->
+  <div class="panel" id="panelJson">
+    <div class="json-drop" id="jsonDropZone">
+      <input type="file" id="jsonFileInput" accept=".json,application/json">
+      <div class="json-drop-icon">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
+      </div>
+      <div class="json-drop-title">Seret file JSON ke sini</div>
+      <div class="json-drop-sub">File hasil ekspor analisis sebelumnya · frekuensi_*.json</div>
+    </div>
+    <!-- recent files list -->
+    <div class="json-history" id="jsonHistory"></div>
+  </div>
+
+  <!-- ── PANEL REKAM ── -->
+  <div class="panel" id="panelRec">
+    <div class="rec-panel-card" id="recCard">
+      <div class="live-viz" id="liveViz"></div>
+      <div class="rec-timer" id="recTimer">00:00.0</div>
+      <div class="rec-status" id="recStatus">Siap merekam</div>
+      <div class="rec-btn-wrap">
+        <div class="rec-pulse"></div>
+        <button id="recBtn" onclick="toggleRecord()">
+          <svg class="icon-mic" viewBox="0 0 24 24">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>
+          </svg>
+          <svg class="icon-stop" viewBox="0 0 24 24">
+            <rect x="6" y="6" width="12" height="12" rx="2" fill="white" stroke="none"/>
+          </svg>
+        </button>
+      </div>
+      <div class="rec-hint" id="recHint">
+        Klik tombol di atas untuk mulai merekam.<br>
+        <b>Putar video/audio di tab atau perangkat lain</b>, lalu klik lagi untuk berhenti.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SOURCE INFO ── -->
+  <div class="source-info" id="sourceInfo">
+    <div class="src-icon" id="srcIcon"></div>
+    <div class="src-details">
+      <div class="src-name" id="srcName">—</div>
+      <div class="src-meta" id="srcMeta">—</div>
+    </div>
+    <button class="btn-src-remove" onclick="resetAll()">
+      <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <!-- ── WAVEFORM ── -->
+  <div class="waveform-wrap" id="waveformWrap">
+    <div class="section-label">Waveform</div>
+    <canvas id="waveformCanvas"></canvas>
+    <div class="range-indicator" id="rangeIndicator"></div>
+  </div>
+
+  <!-- ── TIME CONTROLS ── -->
+  <div class="controls-grid">
+    <div class="field">
+      <label>Mulai (detik)</label>
+      <input type="number" id="startTime" value="0" min="0" step="0.1">
+    </div>
+    <div class="field">
+      <label>Selesai (detik)</label>
+      <input type="number" id="endTime" value="5" min="0" step="0.1">
+    </div>
+    <button class="btn-analyze" id="analyzeBtn" disabled onclick="analyze()">Analisis →</button>
+  </div>
+
+  <!-- ── ERROR / LOADING ── -->
+  <div class="error-msg" id="errorMsg">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+    <span id="errorText"></span>
+  </div>
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadingText">Memproses…</div>
+  </div>
+
+  <!-- ── RESULTS ── -->
+  <div class="results-wrap" id="resultsWrap">
+
+    <div class="spectrum-card">
+      <div class="section-label">Spektrum Frekuensi (FFT)</div>
+      <canvas id="spectrumCanvas"></canvas>
+    </div>
+
+    <!-- ── SPECTROGRAM ── -->
+    <div class="spectrogram-card">
+      <div class="section-label">Spektrogram (STFT) — Frekuensi vs Waktu</div>
+      <div class="stft-controls">
+        <div class="stft-ctrl-group">
+          <label>Window</label>
+          <select class="stft-select" id="stftWindow">
+            <option value="512">512 (resolusi waktu tinggi)</option>
+            <option value="1024" selected>1024 (seimbang)</option>
+            <option value="2048">2048 (resolusi freq tinggi)</option>
+          </select>
+        </div>
+        <div class="stft-ctrl-group">
+          <label>Tampilkan s/d</label>
+          <select class="stft-select" id="stftMaxFreq">
+            <option value="4000">4 kHz</option>
+            <option value="8000" selected>8 kHz</option>
+            <option value="12000">12 kHz</option>
+            <option value="0">Semua</option>
+          </select>
+        </div>
+        <div class="stft-ctrl-group">
+          <label>Warna</label>
+          <select class="stft-select" id="stftColormap">
+            <option value="inferno" selected>Inferno</option>
+            <option value="viridis">Viridis</option>
+            <option value="plasma">Plasma</option>
+            <option value="cyan">Cyan</option>
+          </select>
+        </div>
+      </div>
+      <canvas id="spectrogramCanvas"></canvas>
+      <div class="sgram-legend">
+        <span class="sgram-grad-label">−80 dB</span>
+        <div class="sgram-grad" id="sgramGrad"></div>
+        <span class="sgram-grad-label">0 dB</span>
+        <span class="sgram-tooltip" id="sgramTooltip"></span>
+      </div>
+      <!-- slide detection result -->
+      <div id="slideResult"></div>
+    </div>
+
+    <div class="stats-row" id="statsRow"></div>
+    <div class="band-grid"  id="bandGrid"></div>
+
+    <div class="freq-table-wrap">
+      <div class="table-header">
+        <div class="table-title">Frekuensi Dominan — Fundamental &amp; Harmonik</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="peak-count" id="peakCount">0 puncak</div>
+          <button class="btn-export" id="btnExport" onclick="exportJSON()">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Simpan JSON
+          </button>
+        </div>
+      </div>
+
+      <!-- Audio player (shown when JSON contains audio) -->
+      <div class="audio-player-bar" id="audioPlayerBar" style="display:none">
+        <span class="audio-player-label">▶ Audio asli</span>
+        <audio id="jsonAudioPlayer" controls></audio>
+      </div>
+
+      <!-- Legend -->
+      <div class="legend-row">
+        <div class="leg"><div class="leg-dot leg-fund"></div>F₀ Fundamental — nada dasar</div>
+        <div class="leg"><div class="leg-dot leg-harm"></div>Hₙ Harmonik — kelipatan F₀</div>
+        <div class="leg"><div class="leg-dot leg-other"></div>Parsial / inharmonik</div>
+      </div>
+
+      <!-- Playback controls -->
+      <div class="playback-bar">
+        <span class="pb-label">Volume</span>
+        <input class="pb-slider" type="range" id="volSlider" min="0" max="1" step="0.01" value="0.35">
+        <span class="pb-val" id="volVal">35%</span>
+        <div class="pb-sep"></div>
+        <span class="pb-label">Durasi</span>
+        <input class="pb-slider" type="range" id="durSlider" min="0.3" max="4" step="0.1" value="1.5">
+        <span class="pb-val" id="durVal">1.5s</span>
+        <div class="pb-sep"></div>
+        <span class="pb-label" style="font-size:9px;opacity:.6">▶ klik baris untuk play sinus murni</span>
+      </div>
+
+      <!-- ── CHORD BUILDER ── -->
+      <div class="chord-bar" id="chordBar">
+        <div class="chord-bar-top">
+          <span class="chord-title">♪ Chord Sinus</span>
+          <div class="chord-slots" id="chordSlots">
+            <span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)">
+              Centang frekuensi di tabel untuk membangun chord (maks 6)
+            </span>
+          </div>
+        </div>
+        <div class="chord-actions">
+          <button class="btn-chord-play" id="btnChordPlay" onclick="toggleChord()" disabled>
+            <svg width="11" height="11" viewBox="0 0 10 10" fill="white"><polygon points="2,1 9,5 2,9"/></svg>
+            Play Chord
+          </button>
+          <button class="btn-chord-clear" onclick="clearChord()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            Kosongkan
+          </button>
+          <button class="btn-chord-export" id="btnChordExport" onclick="exportChordWAV()" disabled title="Export 2 file WAV untuk LMMS">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export WAV (LMMS)
+          </button>
+          <div class="pb-sep"></div>
+          <span class="pb-label">Durasi</span>
+          <input class="pb-slider" type="range" id="chordDurSlider" min="1" max="10" step="0.5" value="4">
+          <span class="pb-val" id="chordDurVal">4s</span>
+        </div>
+        <div class="chord-export-status" id="chordExportStatus"></div>
+        <div class="chord-hint">
+          Centang beberapa frekuensi → semua berbunyi bersamaan sebagai sinus murni · 
+          <b>bernyanyi di atasnya</b> untuk merasakan "musik binatang" Anda ·
+          <b>Export WAV</b> untuk dibawa ke LMMS
+        </div>
+      </div>
+
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th title="Tambah ke chord">♪</th>
+              <th>#</th>
+              <th>Frekuensi</th>
+              <th>Tipe</th>
+              <th>Rasio ke F₀</th>
+              <th>Not Musik</th>
+              <th>dB</th>
+              <th class="bar-cell">Kekuatan</th>
+              <th>▶ Sinus</th>
+            </tr>
+          </thead>
+          <tbody id="freqTableBody"></tbody>
+        </table>
+      </div>
+    </div><!-- /freq-table-wrap -->
+
+  </div><!-- /results-wrap -->
+
+  <!-- ════════════════════════════════
+       MELODY KEYBOARD (outside results-wrap so it stays accessible)
+  ════════════════════════════════ -->
+  <div class="melody-wrap" id="melodyWrap">
+
+    <div class="melody-header">
+      <div>
+        <div class="melody-title">🎹 Keyboard Melodi — Frekuensi FFT</div>
+        <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);margin-top:3px">
+          Tekan tombol keyboard untuk memainkan · tahan = sustain · lepas = stop
+        </div>
+      </div>
+      <div class="melody-rec-badge" id="melodyRecBadge">
+        <div class="rec-dot"></div>
+        <span id="melodyRecLabel">Siap</span>
+      </div>
+    </div>
+
+    <!-- Key grid -->
+    <div class="key-grid-wrap">
+      <div class="key-grid" id="keyGrid"></div>
+    </div>
+
+    <!-- ── METRONOME BAR ── -->
+    <div class="metro-bar">
+      <div class="metro-left">
+        <button class="btn-metro" id="btnMetro" onclick="toggleMetronome()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 12 11 12 11 19 13 19 13 12 18 12 13 5"/>
+          </svg>
+          Metronome
+        </button>
+        <div class="metro-beat-row">
+          <div class="metro-dot" id="md0"></div>
+          <div class="metro-dot" id="md1"></div>
+          <div class="metro-dot" id="md2"></div>
+          <div class="metro-dot" id="md3"></div>
+        </div>
+        <span class="pb-label">BPM</span>
+        <input class="pb-slider" type="range" id="bpmSlider" min="40" max="240" step="1" value="120">
+        <span class="pb-val" id="bpmVal">120</span>
+        <div class="pb-sep"></div>
+        <span class="pb-label">Birama</span>
+        <select class="stft-select" id="timeSigSelect">
+          <option value="4">4/4</option>
+          <option value="3">3/4</option>
+          <option value="2">2/4</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="melody-controls">
+      <button class="btn-melody-rec" id="btnMelodyRec" onclick="toggleMelodyRecord()">
+        <svg viewBox="0 0 24 24" style="fill:white;stroke:white"><circle cx="12" cy="12" r="8" fill="white"/></svg>
+        Rekam Melodi
+      </button>
+      <button class="btn-melody-stop" id="btnMelodyStop" onclick="stopMelodyRecord()" disabled>
+        <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/></svg>
+        Stop
+      </button>
+      <button class="btn-melody-export" id="btnMelodyExport" onclick="exportMelodyWAV()" disabled>
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export Keyboard WAV
+      </button>
+      <div class="pb-sep"></div>
+      <span class="melody-timer" id="melodyTimer">00:00.0</span>
+      <div class="pb-sep"></div>
+      <span class="pb-label">Sustain</span>
+      <input class="pb-slider" type="range" id="sustainSlider" min="0.05" max="2" step="0.05" value="0.4">
+      <span class="pb-val" id="sustainVal">0.4s</span>
+      <div class="pb-sep"></div>
+      <span class="pb-label">Quantize</span>
+      <select class="stft-select" id="quantizeSelect">
+        <option value="0">Off</option>
+        <option value="0.5">1/2</option>
+        <option value="0.25" selected>1/4</option>
+        <option value="0.125">1/8</option>
+        <option value="0.0625">1/16</option>
+      </select>
+    </div>
+
+    <!-- Note roll (keyboard recording) -->
+    <div class="note-roll">
+      <div class="note-roll-label">Rekaman keyboard terakhir</div>
+      <div class="note-roll-track" id="noteRollTrack">
+        <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);
+          position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)">
+          Tekan Rekam lalu mainkan melodi
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════
+         PIANO ROLL EDITOR
+    ══════════════════════════════ -->
+    <div class="pr-section">
+      <div class="pr-header">
+        <div>
+          <div class="melody-title">🎼 Piano Roll Editor</div>
+          <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);margin-top:3px">
+            Klik grid = tambah not · Klik not = hapus · Drag kanan = panjangkan · Presisi beat sempurna
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span class="pb-label">Bar</span>
+          <input class="pb-slider" type="range" id="prBarsSlider" min="1" max="16" step="1" value="4">
+          <span class="pb-val" id="prBarsVal">4</span>
+          <div class="pb-sep"></div>
+          <button class="btn-melody-stop" id="btnPrPlay" onclick="togglePianoRollPlay()" style="border-color:var(--accent2);color:var(--accent2)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Play Roll
+          </button>
+          <button class="btn-melody-export" id="btnPrExport" onclick="exportPianoRollWAV()" disabled>
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Roll WAV
+          </button>
+          <button class="btn-chord-clear" onclick="clearPianoRoll()">Kosongkan</button>
+        </div>
+      </div>
+      <div class="pr-canvas-wrap">
+        <!-- freq labels -->
+        <div class="pr-freq-labels" id="prFreqLabels"></div>
+        <!-- grid canvas -->
+        <div class="pr-grid-wrap">
+          <canvas id="prCanvas"></canvas>
+          <div class="pr-playhead" id="prPlayhead" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /melody-wrap -->
+
+</div><!-- /container -->
+
+<script>
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let audioBuffer   = null;
+let lastResult    = null;
+let mediaRecorder = null, capturedChunks = [], recTimerInt = null, recStartTime = 0;
+let liveCtx = null, liveAnalyser = null, liveAnimFrame = null;
+let playCtx = null, activeOsc = null, activeBtn = null;
+// melody keyboard
+let melodyFreqs    = [], melodyOscs = {}, melodyRecording = false;
+let melodyEvents   = [], melodyRecStart = 0, melodyTimerInt = null;
+let melodyActiveKeys = new Set();
+// metronome
+let metroRunning = false, metroNextTime = 0, metroBeat = 0;
+let metroScheduler = null, metroCtx = null;
+// piano roll
+let prNotes  = [];      // [{row, beatStart, beatDur}]  row=freq index
+let prBars   = 4;
+let prCellW  = 0, prCellH = 40;
+let prBeats  = 16;      // beats per bar × bars (subdivisions = 1/4)
+let prDragging = null;  // {row, beatStart} — note being extended
+let prPlaying  = false, prPlayStart = 0, prPlayOscs = [], prPlayAnim = null;
+const AudioCtxCtor = window.AudioContext || window.webkitAudioContext;
+const VIZ_BARS = 32;
+
+// build viz bars
+(function(){
+  const viz = document.getElementById('liveViz');
+  for(let i=0;i<VIZ_BARS;i++){const b=document.createElement('div');b.className='viz-bar';viz.appendChild(b);}
+})();
+
+// slider labels
+document.getElementById('volSlider').addEventListener('input',function(){
+  document.getElementById('volVal').textContent=Math.round(this.value*100)+'%';
+});
+document.getElementById('durSlider').addEventListener('input',function(){
+  document.getElementById('durVal').textContent=parseFloat(this.value).toFixed(1)+'s';
+});
+
+// ══════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════
+function switchTab(tab){
+  ['file','rec','json'].forEach(t=>{
+    document.getElementById('panel'+t.charAt(0).toUpperCase()+t.slice(1))
+      .classList.toggle('active', t===tab);
+    document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1))
+      .classList.toggle('active', t===tab);
+  });
+  showError(false);
+  if(tab==='json') renderHistory();
+}
+
+// ══════════════════════════════════════════════
+// JSON DROP ZONE
+// ══════════════════════════════════════════════
+const jsonDropZone  = document.getElementById('jsonDropZone');
+const jsonFileInput = document.getElementById('jsonFileInput');
+jsonDropZone.addEventListener('click', ()=> jsonFileInput.click());
+jsonDropZone.addEventListener('dragover', e=>{ e.preventDefault(); jsonDropZone.classList.add('drag-over'); });
+jsonDropZone.addEventListener('dragleave', ()=> jsonDropZone.classList.remove('drag-over'));
+jsonDropZone.addEventListener('drop', e=>{
+  e.preventDefault(); jsonDropZone.classList.remove('drag-over');
+  if(e.dataTransfer.files[0]) readJSONFile(e.dataTransfer.files[0]);
+});
+jsonFileInput.addEventListener('change', ()=>{ if(jsonFileInput.files[0]) readJSONFile(jsonFileInput.files[0]); });
+
+function readJSONFile(file){
+  if(!file.name.endsWith('.json') && file.type !== 'application/json'){
+    showError('File harus berformat .json'); return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      loadFromJSON(data, file.name);
+    } catch(err) {
+      showError('File JSON tidak valid: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ══════════════════════════════════════════════
+// LOAD FROM JSON — render all result panels
+// ══════════════════════════════════════════════
+async function loadFromJSON(data, filename){
+  showError(false);
+  // validate structure
+  if(!data.frequencies || !data.summary || !data.metadata){
+    showError('Format JSON tidak dikenal. Pastikan file berasal dari ekspor aplikasi ini.'); return;
+  }
+
+  // store as lastResult so export still works
+  lastResult = data;
+
+  const meta    = data.metadata;
+  const summary = data.summary;
+  const bands   = data.band_energy_percent || {};
+  const freqs   = data.frequencies;
+  const f0      = summary.fundamental_f0_hz;
+  const sr      = meta.sample_rate_hz || 44100;
+
+  // source info bar
+  document.getElementById('srcIcon').className = 'src-icon src-json';
+  document.getElementById('srcIcon').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="var(--accent2)"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+  document.getElementById('srcName').textContent = meta.source || filename;
+  document.getElementById('srcMeta').textContent =
+    `JSON · ${meta.analysis_range_sec.duration}s dianalisis · F₀ ${f0} Hz · ${freqs.length} puncak`;
+  document.getElementById('sourceInfo').classList.add('show');
+
+  // ── Restore audio if embedded ──
+  const audioBar = document.getElementById('audioPlayerBar');
+  const audioEl  = document.getElementById('jsonAudioPlayer');
+  audioBar.style.display = 'none';
+  audioEl.src = '';
+  audioBuffer = null;
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('waveformWrap').classList.remove('show');
+
+  if(data.audio_wav_b64){
+    try{
+      // decode base64 → ArrayBuffer → AudioBuffer
+      const binStr  = atob(data.audio_wav_b64);
+      const bytes   = new Uint8Array(binStr.length);
+      for(let i=0;i<binStr.length;i++) bytes[i]=binStr.charCodeAt(i);
+      const arrayBuf = bytes.buffer;
+
+      // restore audioBuffer for re-analysis
+      const actx = new AudioCtxCtor();
+      audioBuffer = await actx.decodeAudioData(arrayBuf.slice(0)); // slice to clone
+      actx.close();
+
+      // update time range inputs
+      const dur = audioBuffer.duration;
+      document.getElementById('endTime').max = dur;
+      document.getElementById('startTime').max = dur;
+      document.getElementById('startTime').value = meta.analysis_range_sec.start.toFixed(1);
+      document.getElementById('endTime').value   = meta.analysis_range_sec.end.toFixed(1);
+
+      // draw waveform
+      drawWaveform();
+      document.getElementById('waveformWrap').classList.add('show');
+      updateRangeIndicator();
+      document.getElementById('analyzeBtn').disabled = false;
+      document.getElementById('srcMeta').textContent += ' · audio tersedia';
+
+      // inline audio player — create object URL from the WAV bytes
+      const wavBlob = new Blob([bytes], {type:'audio/wav'});
+      audioEl.src   = URL.createObjectURL(wavBlob);
+      audioBar.style.display = 'flex';
+    }catch(err){
+      console.warn('audio restore failed', err);
+    }
+  }
+
+  // ── stat cards ──
+  const f0Label = f0>=1000 ? (f0/1000).toFixed(3)+' kHz' : f0.toFixed(1)+' Hz';
+  const domF    = summary.dominant_frequency_hz;
+  const domLabel= domF>=1000 ? (domF/1000).toFixed(2)+' kHz' : domF.toFixed(1)+' Hz';
+  document.getElementById('statsRow').innerHTML = [
+    {label:'Fundamental F₀',    value: f0Label,  cls:'fund-color'},
+    {label:'Frekuensi Dominan', value: domLabel, cls:''},
+    {label:'Resolusi FFT',      value: meta.fft_resolution_hz.toFixed(2)+' Hz/bin', cls:''},
+    {label:'Durasi Analisis',   value: meta.analysis_range_sec.duration.toFixed(2)+' detik', cls:''},
+  ].map(s=>`<div class="stat-card"><div class="stat-value ${s.cls}">${s.value}</div><div class="stat-label">${s.label}</div></div>`).join('');
+
+  // ── band cards ──
+  const bandDefs=[
+    {name:'Bass',    key:'bass',     range:'20–250 Hz',  cls:'band-bass'},
+    {name:'Midrange',key:'midrange', range:'250–2k Hz',  cls:'band-mid'},
+    {name:'Treble',  key:'treble',   range:'2k–8k Hz',   cls:'band-high'},
+    {name:'Air',     key:'air',      range:'8k–20k Hz',  cls:'band-air'},
+  ];
+  document.getElementById('bandGrid').innerHTML = bandDefs.map(b=>{
+    const pct = bands[b.key] ?? 0;
+    return`<div class="band-card ${b.cls}">
+      <div class="band-name">${b.name}</div>
+      <div class="band-range">${b.range}</div>
+      <div class="band-bar"><div class="band-fill" style="width:${pct}%"></div></div>
+      <div class="band-pct">${pct}%</div>
+    </div>`;
+  }).join('');
+
+  // ── spectrum canvas — draw from saved peaks (bar chart style) ──
+  drawSpectrumFromJSON(freqs, f0, sr);
+
+  // ── frequency table ──
+  const maxDb = Math.max(...freqs.map(p=>p.amplitude_db));
+  document.getElementById('peakCount').textContent = freqs.length + ' puncak';
+  document.getElementById('freqTableBody').innerHTML = freqs.map((p,i)=>{
+    const freq     = p.frequency_hz;
+    const db       = p.amplitude_db;
+    const harmN    = p.harmonic_number;
+    const ratio    = p.ratio_to_f0;
+    const note     = p.musical_note || freqToNote(freq);
+    const pct      = Math.max(0,Math.min(100,((db-(-80))/80)*100));
+    const fl       = freq>=1000?(freq/1000).toFixed(3)+' kHz':freq.toFixed(1)+' Hz';
+    const isFund   = p.type==='fundamental';
+    const isHarm   = p.type && p.type.startsWith('harmonic');
+    const rowCls   = isFund?'row-fund':isHarm?'row-harm':'row-other';
+    const badge    = isFund
+      ? `<span class="type-badge badge-fund"><span class="badge-dot"></span>F₀ Fundamental</span>`
+      : isHarm
+        ? `<span class="type-badge badge-harm"><span class="badge-dot"></span>H${harmN} Harmonik-${harmN}</span>`
+        : `<span class="type-badge badge-other"><span class="badge-dot"></span>Parsial</span>`;
+    const ratioStr = ratio!=null?`×${parseFloat(ratio).toFixed(2)}`:'—';
+    return`<tr class="${rowCls}" data-freq="${freq}">
+      <td style="color:var(--muted);font-size:11px">${i+1}</td>
+      <td class="freq-val">${fl}</td>
+      <td>${badge}</td>
+      <td style="font-size:11px;color:var(--muted)">${ratioStr}</td>
+      <td>${note?`<span class="note-badge">${note}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
+      <td style="color:var(--muted)">${parseFloat(db).toFixed(1)}</td>
+      <td class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:${pct.toFixed(1)}%"></div></div></td>
+      <td><button class="play-btn" id="pbtn-${i}" onclick="toggleSine(${freq},${i})">
+        <svg viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9"/></svg>
+        ${freq>=1000?(freq/1000).toFixed(2)+'k':Math.round(freq)} Hz
+      </button></td>
+    </tr>`;
+  }).join('');
+
+  // show results
+  document.getElementById('resultsWrap').classList.add('show');
+  document.getElementById('chordBar').classList.add('show');
+  renderChordSlots();
+  // build melody keyboard from JSON freqs
+  const classifiedFromJson = freqs.map(p=>({
+    freq: p.frequency_hz, db: p.amplitude_db,
+    type: p.type==='fundamental'?'fund': p.type.startsWith('harmonic')?'harm':'other',
+    harmN: p.harmonic_number, ratio: p.ratio_to_f0
+  }));
+  buildMelodyKeyboard(classifiedFromJson);
+  document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth',block:'nearest'});
+
+  // save to recent list
+  saveToHistory({filename, meta, summary, data});
+  renderHistory();
+}
+
+// ══════════════════════════════════════════════
+// DRAW SPECTRUM FROM JSON (peak bar chart)
+// ══════════════════════════════════════════════
+function drawSpectrumFromJSON(freqs, f0, sr){
+  const dpr=window.devicePixelRatio||1, cvs=document.getElementById('spectrumCanvas');
+  const w=cvs.offsetWidth||900, h=220;
+  cvs.width=w*dpr; cvs.height=h*dpr;
+  const ctx=cvs.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.fillStyle='#0a0c14'; ctx.fillRect(0,0,w,h);
+  const pad={l:50,r:16,t:22,b:36};
+  const pw=w-pad.l-pad.r, ph=h-pad.t-pad.b;
+  const maxF=sr/2, dbMin=-80, dbMax=0;
+  const freqX=f=>pad.l+(Math.log10(Math.max(f,20)/20)/Math.log10(maxF/20))*pw;
+  const dbY=db=>pad.t+ph*(1-(Math.max(dbMin,Math.min(dbMax,db))-dbMin)/(dbMax-dbMin));
+
+  ctx.font='9px Space Mono'; ctx.lineWidth=1;
+  // dB grid
+  for(let db=dbMin;db<=dbMax;db+=20){
+    const y=dbY(db);
+    ctx.strokeStyle='rgba(255,255,255,.04)'; ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+pw,y); ctx.stroke();
+    ctx.fillStyle='rgba(90,96,128,.7)'; ctx.textAlign='right'; ctx.fillText(db+'dB',pad.l-6,y+3);
+  }
+  // freq grid
+  [100,200,500,1000,2000,5000,10000,20000].filter(f=>f<=maxF).forEach(f=>{
+    const x=freqX(f);
+    ctx.strokeStyle='rgba(255,255,255,.04)'; ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ph); ctx.stroke();
+    ctx.fillStyle='rgba(90,96,128,.7)'; ctx.textAlign='center';
+    ctx.fillText(f>=1000?(f/1000)+'k':f, x, h-pad.b+14);
+  });
+  // band zones
+  [[20,250,'rgba(255,92,122,.04)'],[250,2000,'rgba(0,245,196,.04)'],[2000,8000,'rgba(123,92,250,.04)'],[8000,maxF,'rgba(255,204,68,.04)']].forEach(([s,e,c])=>{
+    ctx.fillStyle=c; ctx.fillRect(freqX(s),pad.t,freqX(Math.min(e,maxF))-freqX(s),ph);
+  });
+
+  // draw each peak as a vertical stem + dot (coloured by type)
+  freqs.forEach(p=>{
+    const f=p.frequency_hz, db=p.amplitude_db;
+    if(f<20||f>maxF) return;
+    const x=freqX(f), y=dbY(db);
+    const isFund = p.type==='fundamental';
+    const isHarm = p.type && p.type.startsWith('harmonic');
+    const stemColor = isFund ? 'rgba(255,215,0,.65)' : isHarm ? 'rgba(168,137,255,.5)' : 'rgba(0,245,196,.4)';
+    const dotColor  = isFund ? '#ffd700'              : isHarm ? '#a889ff'              : '#00f5c4';
+    const dotR      = isFund ? 5 : isHarm ? 3.5 : 2.5;
+
+    ctx.strokeStyle=stemColor; ctx.lineWidth=isFund?1.8:1;
+    ctx.setLineDash(isFund?[]:[3,3]);
+    ctx.beginPath(); ctx.moveTo(x,pad.t+ph); ctx.lineTo(x,y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle=dotColor; ctx.beginPath(); ctx.arc(x,y,dotR,0,Math.PI*2); ctx.fill();
+
+    if(isFund){
+      ctx.fillStyle='rgba(255,215,0,.9)'; ctx.font='bold 9px Space Mono'; ctx.textAlign='center';
+      const lbl=f>=1000?(f/1000).toFixed(2)+'kHz':Math.round(f)+'Hz';
+      ctx.fillText('F₀ '+lbl, x, pad.t-4);
+    } else if(isHarm){
+      ctx.fillStyle='rgba(168,137,255,.85)'; ctx.font='9px Space Mono'; ctx.textAlign='center';
+      ctx.fillText('H'+p.harmonic_number, x, pad.t+8);
+    }
+  });
+
+  // axis label
+  ctx.fillStyle='rgba(90,96,128,.6)'; ctx.font='9px Space Mono'; ctx.textAlign='center';
+  ctx.fillText('Frekuensi (Hz) — skala log · rekonstruksi dari JSON', pad.l+pw/2, h-2);
+}
+
+// ══════════════════════════════════════════════
+// RECENT JSON HISTORY (sessionStorage)
+// ══════════════════════════════════════════════
+function saveToHistory(entry){
+  try{
+    const raw = sessionStorage.getItem('jsonHistory');
+    const hist = raw ? JSON.parse(raw) : [];
+    // deduplicate by filename
+    const filtered = hist.filter(h=>h.filename!==entry.filename);
+    filtered.unshift({
+      filename : entry.filename,
+      source   : entry.meta.source,
+      duration : entry.meta.analysis_range_sec.duration,
+      f0       : entry.summary.fundamental_f0_hz,
+      peaks    : entry.summary.peak_count,
+      exportedAt: entry.meta.exported_at,
+      _data    : entry.data   // full data for re-load
+    });
+    sessionStorage.setItem('jsonHistory', JSON.stringify(filtered.slice(0,8)));
+  }catch(e){}
+}
+
+function renderHistory(){
+  try{
+    const raw = sessionStorage.getItem('jsonHistory');
+    if(!raw) return;
+    const hist = JSON.parse(raw);
+    if(!hist.length) return;
+    const container = document.getElementById('jsonHistory');
+    container.classList.add('show');
+    container.innerHTML = `<div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);
+        text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">
+        File yang pernah dimuat (sesi ini)</div>`
+      + hist.map((h,i)=>{
+        const f0Lbl = h.f0>=1000?(h.f0/1000).toFixed(2)+'kHz':h.f0.toFixed(0)+'Hz';
+        const date  = h.exportedAt ? new Date(h.exportedAt).toLocaleString('id') : '—';
+        return`<div class="json-hist-item" onclick="reloadHistory(${i})">
+          <div class="jhi-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg></div>
+          <div class="jhi-details">
+            <div class="jhi-name">${h.filename}</div>
+            <div class="jhi-meta">F₀ ${f0Lbl} · ${h.peaks} puncak · ${h.duration}s · ${date}</div>
+          </div>
+          <button class="jhi-remove" onclick="removeHistory(event,${i})" title="Hapus dari daftar">
+            <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>`;
+      }).join('');
+  }catch(e){}
+}
+
+function reloadHistory(idx){
+  try{
+    const hist = JSON.parse(sessionStorage.getItem('jsonHistory')||'[]');
+    if(hist[idx]) loadFromJSON(hist[idx]._data, hist[idx].filename);
+  }catch(e){}
+}
+
+function removeHistory(event, idx){
+  event.stopPropagation();
+  try{
+    const hist = JSON.parse(sessionStorage.getItem('jsonHistory')||'[]');
+    hist.splice(idx,1);
+    sessionStorage.setItem('jsonHistory', JSON.stringify(hist));
+    renderHistory();
+  }catch(e){}
+}
+
+// ══════════════════════════════════════════════
+// FILE UPLOAD
+// ══════════════════════════════════════════════
+const dropZone=document.getElementById('dropZone');
+const fileInput=document.getElementById('fileInput');
+dropZone.addEventListener('click',()=>fileInput.click());
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('drag-over');});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('drag-over');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',()=>{if(fileInput.files[0])loadFile(fileInput.files[0]);});
+
+async function loadFile(file){
+  showError(false); setLoading(true,'Mendekode audio…');
+  try{
+    const ctx=new AudioCtxCtor();
+    audioBuffer=await ctx.decodeAudioData(await file.arrayBuffer());
+    ctx.close();
+    showSrcInfo('file',file.name,
+      `${(file.size/1024/1024).toFixed(2)} MB · ${audioBuffer.duration.toFixed(2)}s · ${audioBuffer.sampleRate} Hz · ${audioBuffer.numberOfChannels}ch`);
+    afterLoad();
+  }catch(e){showError('Gagal decode: '+e.message);}
+  setLoading(false);
+}
+
+// ══════════════════════════════════════════════
+// MICROPHONE RECORDING
+// ══════════════════════════════════════════════
+async function toggleRecord(){
+  (mediaRecorder&&mediaRecorder.state==='recording')?stopRecord():await startRecord();
+}
+async function startRecord(){
+  showError(false);
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({
+      audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}
+    });
+    liveCtx=new AudioCtxCtor(); liveAnalyser=liveCtx.createAnalyser(); liveAnalyser.fftSize=64;
+    liveCtx.createMediaStreamSource(stream).connect(liveAnalyser); animateLiveViz();
+    capturedChunks=[];
+    const mime=['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4']
+                 .find(t=>MediaRecorder.isTypeSupported(t))||'';
+    mediaRecorder=new MediaRecorder(stream,mime?{mimeType:mime}:{});
+    mediaRecorder.ondataavailable=e=>{if(e.data.size>0)capturedChunks.push(e.data);};
+    mediaRecorder.onstop=processRecording;
+    mediaRecorder.start(100); recStartTime=Date.now();
+    document.getElementById('recBtn').classList.add('recording');
+    document.getElementById('recCard').classList.add('recording');
+    document.getElementById('liveViz').classList.add('recording');
+    document.getElementById('recStatus').textContent='● Merekam…';
+    document.getElementById('recStatus').classList.add('active');
+    document.getElementById('recTimer').classList.add('active');
+    document.getElementById('recHint').innerHTML='Putar suara/video sekarang.<br><b>Klik tombol stop</b> jika sudah selesai.';
+    recTimerInt=setInterval(updateRecTimer,100);
+  }catch(e){
+    if(e.name==='NotAllowedError')showError('Izin mikrofon ditolak. Izinkan akses mikrofon di browser lalu coba lagi.');
+    else showError('Gagal akses mikrofon: '+e.message);
+  }
+}
+function stopRecord(){
+  if(mediaRecorder&&mediaRecorder.state!=='inactive'){mediaRecorder.stream.getTracks().forEach(t=>t.stop());mediaRecorder.stop();}
+  clearInterval(recTimerInt); stopLiveViz();
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recCard').classList.remove('recording');
+  document.getElementById('liveViz').classList.remove('recording');
+  document.getElementById('recStatus').textContent='Memproses rekaman…';
+  document.getElementById('recStatus').classList.remove('active');
+  document.getElementById('recTimer').classList.remove('active');
+}
+async function processRecording(){
+  if(!capturedChunks.length){showError('Tidak ada data yang direkam.');resetRecUI();return;}
+  setLoading(true,'Memproses audio rekaman…');
+  try{
+    const blob=new Blob(capturedChunks,{type:capturedChunks[0]?.type||'audio/webm'});
+    const ctx=new AudioCtxCtor();
+    audioBuffer=await ctx.decodeAudioData(await blob.arrayBuffer());
+    ctx.close();
+    showSrcInfo('rec',`Rekaman mikrofon — ${formatTime(audioBuffer.duration)}`,
+      `${audioBuffer.duration.toFixed(2)}s · ${audioBuffer.sampleRate} Hz · ${audioBuffer.numberOfChannels}ch`);
+    afterLoad();
+  }catch(e){showError('Gagal proses rekaman: '+e.message);}
+  setLoading(false); resetRecUI();
+}
+function resetRecUI(){
+  document.getElementById('recStatus').textContent='Siap merekam';
+  document.getElementById('recTimer').textContent='00:00.0';
+  document.getElementById('recHint').innerHTML='Klik tombol di atas untuk mulai merekam.<br><b>Putar video/audio di tab atau perangkat lain</b>, lalu klik lagi untuk berhenti.';
+  document.querySelectorAll('.viz-bar').forEach(b=>{b.style.height='4px';});
+}
+function updateRecTimer(){document.getElementById('recTimer').textContent=formatTime((Date.now()-recStartTime)/1000);}
+function formatTime(sec){
+  const m=Math.floor(sec/60),s=Math.floor(sec%60),ds=Math.floor((sec%1)*10);
+  return`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${ds}`;
+}
+function animateLiveViz(){
+  const data=new Uint8Array(liveAnalyser.frequencyBinCount),bars=document.querySelectorAll('.viz-bar');
+  function frame(){liveAnimFrame=requestAnimationFrame(frame);liveAnalyser.getByteFrequencyData(data);bars.forEach((b,i)=>{b.style.height=Math.max(4,(data[i]||0)/255*52)+'px';});}
+  frame();
+}
+function stopLiveViz(){
+  if(liveAnimFrame){cancelAnimationFrame(liveAnimFrame);liveAnimFrame=null;}
+  if(liveCtx){liveCtx.close();liveCtx=null;}
+  document.querySelectorAll('.viz-bar').forEach(b=>{b.style.height='4px';});
+}
+
+// ══════════════════════════════════════════════
+// AFTER LOAD (common)
+// ══════════════════════════════════════════════
+function afterLoad(){
+  const dur=audioBuffer.duration;
+  const et=document.getElementById('endTime'),st=document.getElementById('startTime');
+  et.max=dur; st.max=dur;
+  if(parseFloat(et.value)>dur) et.value=Math.min(dur,5).toFixed(1);
+  drawWaveform();
+  document.getElementById('waveformWrap').classList.add('show');
+  document.getElementById('analyzeBtn').disabled=false;
+  document.getElementById('resultsWrap').classList.remove('show');
+  updateRangeIndicator();
+}
+
+// ══════════════════════════════════════════════
+// SOURCE INFO BAR
+// ══════════════════════════════════════════════
+const SVG_FILE=`<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"><path d="M9 18V5l12-2v13M9 9l12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+const SVG_MIC=`<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>`;
+function showSrcInfo(type,name,meta){
+  const icon=document.getElementById('srcIcon');
+  icon.className='src-icon src-'+type;
+  icon.innerHTML=type==='file'?SVG_FILE:SVG_MIC;
+  document.getElementById('srcName').textContent=name;
+  document.getElementById('srcMeta').textContent=meta;
+  document.getElementById('sourceInfo').classList.add('show');
+}
+
+// ══════════════════════════════════════════════
+// WAVEFORM
+// ══════════════════════════════════════════════
+function drawWaveform(){
+  const dpr=window.devicePixelRatio||1,cvs=document.getElementById('waveformCanvas');
+  const w=cvs.offsetWidth||900,h=80;
+  cvs.width=w*dpr; cvs.height=h*dpr;
+  const ctx=cvs.getContext('2d'); ctx.scale(dpr,dpr);
+  const data=audioBuffer.getChannelData(0),step=Math.ceil(data.length/w),mid=h/2;
+  const s=parseFloat(document.getElementById('startTime').value)||0;
+  const e=parseFloat(document.getElementById('endTime').value)||audioBuffer.duration;
+  const dur=audioBuffer.duration;
+  ctx.fillStyle='#0a0c14'; ctx.fillRect(0,0,w,h);
+  const rx=(s/dur)*w,rw=((e-s)/dur)*w;
+  ctx.fillStyle='rgba(0,245,196,.06)'; ctx.fillRect(rx,0,rw,h);
+  ctx.fillStyle='rgba(0,245,196,.5)'; ctx.fillRect(rx,0,2,h); ctx.fillRect(rx+rw-2,0,2,h);
+  ctx.beginPath(); ctx.strokeStyle='rgba(123,92,250,.6)'; ctx.lineWidth=1;
+  for(let i=0;i<w;i++){
+    let mn=1,mx=-1;
+    for(let j=0;j<step;j++){const v=data[i*step+j]||0;if(v<mn)mn=v;if(v>mx)mx=v;}
+    ctx.moveTo(i,mid+mn*mid*.9); ctx.lineTo(i,mid+mx*mid*.9);
+  }
+  ctx.stroke();
+}
+document.getElementById('startTime').addEventListener('input',()=>{if(audioBuffer){drawWaveform();updateRangeIndicator();}});
+document.getElementById('endTime'  ).addEventListener('input',()=>{if(audioBuffer){drawWaveform();updateRangeIndicator();}});
+function updateRangeIndicator(){
+  const s=parseFloat(document.getElementById('startTime').value)||0;
+  const e=parseFloat(document.getElementById('endTime').value)||0;
+  const ri=document.getElementById('rangeIndicator');
+  ri.textContent=`RANGE: ${s.toFixed(2)}s → ${e.toFixed(2)}s  (durasi: ${(e-s).toFixed(2)}s)`;
+  ri.classList.add('show');
+}
+
+// ══════════════════════════════════════════════
+// ANALYZE
+// ══════════════════════════════════════════════
+async function analyze(){
+  if(!audioBuffer) return;
+  let s=parseFloat(document.getElementById('startTime').value)||0;
+  let e=parseFloat(document.getElementById('endTime').value)||audioBuffer.duration;
+  if(s<0)s=0; if(e>audioBuffer.duration)e=audioBuffer.duration;
+  if(s>=e){showError('Waktu mulai harus lebih kecil dari waktu selesai.');return;}
+  if((e-s)<0.05){showError('Rentang terlalu pendek (min 50ms).');return;}
+  stopSine(); showError(false); setLoading(true,'Memproses FFT…');
+  document.getElementById('resultsWrap').classList.remove('show');
+  await new Promise(r=>setTimeout(r,50));
+  try{
+    const sr=audioBuffer.sampleRate;
+    const s0=Math.floor(s*sr),s1=Math.floor(e*sr),len=s1-s0;
+    // mix to mono
+    const mono=new Float32Array(len);
+    for(let c=0;c<audioBuffer.numberOfChannels;c++){
+      const ch=audioBuffer.getChannelData(c);
+      for(let i=0;i<len;i++) mono[i]+=ch[s0+i]/audioBuffer.numberOfChannels;
+    }
+    // FFT size
+    let fftSize=1;
+    while(fftSize<Math.min(len,32768))fftSize<<=1;
+    if(fftSize>len)fftSize>>=1; if(fftSize<256)fftSize=256;
+    // Hann window
+    const win=new Float32Array(fftSize);
+    for(let i=0;i<fftSize;i++) win[i]=(mono[i]||0)*.5*(1-Math.cos(2*Math.PI*i/(fftSize-1)));
+    const {re,im}=fft(win);
+    const bins=fftSize/2;
+    const mag=new Float32Array(bins); let maxMag=0;
+    for(let i=0;i<bins;i++){mag[i]=Math.sqrt(re[i]*re[i]+im[i]*im[i]);if(mag[i]>maxMag)maxMag=mag[i];}
+    const dB=new Float32Array(bins);
+    for(let i=0;i<bins;i++) dB[i]=mag[i]>0?20*Math.log10(mag[i]/maxMag):-120;
+    const freqRes=sr/fftSize;
+
+    // Detect fundamental via HPS
+    const f0=detectF0(mag,freqRes,bins);
+    // Find peaks
+    const peaks=findPeaks(dB,freqRes,bins,sr);
+    // Classify
+    const classified=classifyPeaks(peaks,f0);
+
+    drawSpectrum(dB,freqRes,bins,sr,f0,classified);
+    drawSpectrogram(mono,sr,s,e);
+    renderStats(dB,freqRes,bins,sr,s,e,f0);
+    renderBands(dB,freqRes,bins);
+    renderTable(classified,f0);
+    buildMelodyKeyboard(classified);
+    // show chord bar (cleared)
+    chordFreqs=[]; stopChord();
+    document.getElementById('chordBar').classList.add('show');
+    renderChordSlots();
+
+    // store for JSON export
+    lastResult = await buildResultObject(classified, f0, freqRes, sr, s, e, dB, bins);
+
+    setLoading(false);
+    document.getElementById('resultsWrap').classList.add('show');
+    document.getElementById('resultsWrap').scrollIntoView({behavior:'smooth',block:'nearest'});
+  }catch(err){setLoading(false);showError('Error: '+err.message);console.error(err);}
+}
+
+// ══════════════════════════════════════════════
+// FFT — Cooley-Tukey
+// ══════════════════════════════════════════════
+function fft(input){
+  const n=input.length,re=new Float64Array(n),im=new Float64Array(n);
+  for(let i=0;i<n;i++) re[i]=input[i];
+  let j=0;
+  for(let i=1;i<n;i++){
+    let bit=n>>1;for(;j&bit;bit>>=1)j^=bit;j^=bit;
+    if(i<j){[re[i],re[j]]=[re[j],re[i]];[im[i],im[j]]=[im[j],im[i]];}
+  }
+  for(let len=2;len<=n;len<<=1){
+    const ang=-2*Math.PI/len,wR=Math.cos(ang),wI=Math.sin(ang);
+    for(let i=0;i<n;i+=len){
+      let cR=1,cI=0;
+      for(let k=0;k<len/2;k++){
+        const uR=re[i+k],uI=im[i+k];
+        const vR=re[i+k+len/2]*cR-im[i+k+len/2]*cI;
+        const vI=re[i+k+len/2]*cI+im[i+k+len/2]*cR;
+        re[i+k]=uR+vR;im[i+k]=uI+vI;re[i+k+len/2]=uR-vR;im[i+k+len/2]=uI-vI;
+        [cR,cI]=[cR*wR-cI*wI,cR*wI+cI*wR];
+      }
+    }
+  }
+  return{re,im};
+}
+
+// ══════════════════════════════════════════════
+// HPS — Harmonic Product Spectrum
+// Mengalikan spektrum dengan versi downsample-nya
+// sehingga frekuensi yang punya harmonik kuat
+// menghasilkan skor tertinggi → itulah F0
+// ══════════════════════════════════════════════
+function detectF0(mag,freqRes,bins){
+  const minF=60,maxF=4000;
+  const minBin=Math.max(1,Math.ceil(minF/freqRes));
+  const maxBin=Math.min(Math.floor(maxF/freqRes),Math.floor(bins/5));
+  const harmonics=5;
+  let bestScore=-1,bestBin=minBin;
+  for(let b=minBin;b<=maxBin;b++){
+    let score=mag[b];
+    for(let h=2;h<=harmonics;h++){const hb=Math.round(b*h);if(hb<bins)score*=mag[hb];}
+    if(score>bestScore){bestScore=score;bestBin=b;}
+  }
+  // parabolic interpolation for sub-bin accuracy
+  if(bestBin>0&&bestBin<bins-1){
+    const a=mag[bestBin-1],b=mag[bestBin],c=mag[bestBin+1];
+    const d=(a-c)/(2*(a-2*b+c)||1);
+    return(bestBin+d)*freqRes;
+  }
+  return bestBin*freqRes;
+}
+
+// ══════════════════════════════════════════════
+// FIND PEAKS
+// ══════════════════════════════════════════════
+function findPeaks(dB,freqRes,bins,sr,count=30){
+  const maxF=sr/2,peaks=[],minDb=-55;
+  const gap=Math.max(3,Math.floor(20/freqRes));
+  for(let i=2;i<bins-2;i++){
+    const f=i*freqRes;if(f<30||f>maxF||dB[i]<minDb)continue;
+    if(dB[i]>dB[i-1]&&dB[i]>dB[i-2]&&dB[i]>dB[i+1]&&dB[i]>dB[i+2])
+      peaks.push({bin:i,freq:parseFloat(f.toFixed(1)),db:parseFloat(dB[i].toFixed(2))});
+  }
+  peaks.sort((a,b)=>b.db-a.db);
+  const out=[];
+  for(const p of peaks){if(!out.some(q=>Math.abs(q.bin-p.bin)<gap)){out.push(p);if(out.length>=count)break;}}
+  return out.sort((a,b)=>a.freq-b.freq);
+}
+
+// ══════════════════════════════════════════════
+// CLASSIFY PEAKS — fundamental vs harmonic
+// ══════════════════════════════════════════════
+function classifyPeaks(peaks,f0){
+  const TOL=0.07; // 7% toleransi
+  return peaks.map(p=>{
+    let type='other',harmN=null;
+    for(let h=1;h<=12;h++){
+      const expected=h*f0;
+      if(Math.abs(p.freq-expected)/expected<=TOL){
+        type=h===1?'fund':'harm';
+        harmN=h; break;
+      }
+    }
+    const ratio=f0>0?p.freq/f0:null;
+    return{...p,type,harmN,ratio};
+  });
+}
+
+// ══════════════════════════════════════════════
+// DRAW SPECTRUM — dengan marker F0 & harmonik
+// ══════════════════════════════════════════════
+function drawSpectrum(dB,freqRes,bins,sr,f0,classified){
+  const dpr=window.devicePixelRatio||1,cvs=document.getElementById('spectrumCanvas');
+  const w=cvs.offsetWidth||900,h=220;
+  cvs.width=w*dpr; cvs.height=h*dpr;
+  const ctx=cvs.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.fillStyle='#0a0c14'; ctx.fillRect(0,0,w,h);
+  const pad={l:50,r:16,t:22,b:36};
+  const pw=w-pad.l-pad.r,ph=h-pad.t-pad.b;
+  const maxF=sr/2,dbMin=-80,dbMax=0;
+
+  const freqX=f=>{
+    if(f<=0)return pad.l;
+    return pad.l+(Math.log10(Math.max(f,20)/20)/Math.log10(maxF/20))*pw;
+  };
+  const dbY=db=>pad.t+ph*(1-(Math.max(dbMin,Math.min(dbMax,db))-dbMin)/(dbMax-dbMin));
+
+  // grid
+  ctx.font='9px Space Mono'; ctx.lineWidth=1;
+  for(let db=dbMin;db<=dbMax;db+=20){
+    const y=dbY(db);
+    ctx.strokeStyle='rgba(255,255,255,.04)'; ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+pw,y); ctx.stroke();
+    ctx.fillStyle='rgba(90,96,128,.7)'; ctx.textAlign='right'; ctx.fillText(db+'dB',pad.l-6,y+3);
+  }
+  [100,200,500,1000,2000,5000,10000,20000].filter(f=>f<=maxF).forEach(f=>{
+    const x=freqX(f);
+    ctx.strokeStyle='rgba(255,255,255,.04)'; ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ph); ctx.stroke();
+    ctx.fillStyle='rgba(90,96,128,.7)'; ctx.textAlign='center';
+    ctx.fillText(f>=1000?(f/1000)+'k':f,x,h-pad.b+14);
+  });
+  // band zones
+  [[20,250,'rgba(255,92,122,.04)'],[250,2000,'rgba(0,245,196,.04)'],[2000,8000,'rgba(123,92,250,.04)'],[8000,maxF,'rgba(255,204,68,.04)']].forEach(([s,e,c])=>{
+    const x1=freqX(s),x2=freqX(Math.min(e,maxF));
+    ctx.fillStyle=c; ctx.fillRect(x1,pad.t,x2-x1,ph);
+  });
+  // spectrum fill
+  const grad=ctx.createLinearGradient(0,pad.t,0,pad.t+ph);
+  grad.addColorStop(0,'rgba(0,245,196,.65)'); grad.addColorStop(.4,'rgba(123,92,250,.45)'); grad.addColorStop(1,'rgba(0,245,196,.03)');
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t+ph);
+  for(let i=1;i<bins;i++){
+    const f=i*freqRes; if(f<20||f>maxF)continue;
+    ctx.lineTo(freqX(f),dbY(dB[i]));
+  }
+  ctx.lineTo(pad.l+pw,pad.t+ph); ctx.closePath(); ctx.fillStyle=grad; ctx.fill();
+  // spectrum line
+  ctx.beginPath(); ctx.strokeStyle='rgba(0,245,196,.85)'; ctx.lineWidth=1.5; let first=true;
+  for(let i=1;i<bins;i++){
+    const f=i*freqRes; if(f<20||f>maxF)continue;
+    const x=freqX(f),y=dbY(dB[i]);
+    first?ctx.moveTo(x,y):ctx.lineTo(x,y); first=false;
+  }
+  ctx.stroke();
+
+  // ── Draw F0 & harmonic markers on spectrum ──
+  classified.forEach(p=>{
+    if(p.freq<20||p.freq>maxF) return;
+    const x=freqX(p.freq), y=dbY(p.db);
+    if(p.type==='fund'){
+      // vertical golden line
+      ctx.save();
+      ctx.strokeStyle='rgba(255,215,0,.7)'; ctx.lineWidth=1.5;
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ph); ctx.stroke();
+      // dot
+      ctx.fillStyle='#ffd700'; ctx.beginPath(); ctx.arc(x,y,4.5,0,Math.PI*2); ctx.fill();
+      // label
+      ctx.fillStyle='#ffd700'; ctx.font='bold 9px Space Mono'; ctx.textAlign='center';
+      const lbl=p.freq>=1000?(p.freq/1000).toFixed(2)+'kHz':Math.round(p.freq)+'Hz';
+      ctx.fillText('F₀ '+lbl,x,pad.t-4);
+      ctx.restore();
+    } else if(p.type==='harm'){
+      ctx.save();
+      ctx.strokeStyle='rgba(168,137,255,.5)'; ctx.lineWidth=1;
+      ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(x,pad.t+10); ctx.lineTo(x,pad.t+ph); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle='#a889ff'; ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(168,137,255,.85)'; ctx.font='9px Space Mono'; ctx.textAlign='center';
+      ctx.fillText('H'+p.harmN,x,pad.t+8);
+      ctx.restore();
+    }
+  });
+
+  // axis label
+  ctx.fillStyle='rgba(90,96,128,.6)'; ctx.font='9px Space Mono'; ctx.textAlign='center';
+  ctx.fillText('Frekuensi (Hz) — skala log',pad.l+pw/2,h-2);
+}
+
+// ══════════════════════════════════════════════
+// RENDER STATS (F0 as first card)
+// ══════════════════════════════════════════════
+function renderStats(dB,freqRes,bins,sr,s,e,f0){
+  const f0Label=f0>=1000?(f0/1000).toFixed(3)+' kHz':f0.toFixed(1)+' Hz';
+  document.getElementById('statsRow').innerHTML=[
+    {label:'Fundamental F₀', value:f0Label,     cls:'fund-color'},
+    {label:'Frekuensi Dominan', value:(()=>{let mx=-120,mxF=0;for(let i=1;i<bins;i++){if(dB[i]>mx){mx=dB[i];mxF=i*freqRes;}}return mxF<1000?mxF.toFixed(0)+' Hz':(mxF/1000).toFixed(2)+' kHz';})(), cls:''},
+    {label:'Resolusi FFT',   value:freqRes.toFixed(2)+' Hz/bin', cls:''},
+    {label:'Durasi Analisis',value:(e-s).toFixed(2)+' detik',    cls:''},
+  ].map(s=>`<div class="stat-card"><div class="stat-value ${s.cls}">${s.value}</div><div class="stat-label">${s.label}</div></div>`).join('');
+}
+
+// ══════════════════════════════════════════════
+// RENDER BANDS
+// ══════════════════════════════════════════════
+function renderBands(dB,freqRes,bins){
+  const bands=[
+    {name:'Bass',range:'20–250 Hz',min:20,max:250,cls:'band-bass'},
+    {name:'Midrange',range:'250–2k Hz',min:250,max:2000,cls:'band-mid'},
+    {name:'Treble',range:'2k–8k Hz',min:2000,max:8000,cls:'band-high'},
+    {name:'Air',range:'8k–20k Hz',min:8000,max:20000,cls:'band-air'},
+  ];
+  let tot=0;
+  const en=bands.map(b=>{
+    let e=0;
+    for(let i=1;i<bins;i++){const f=i*freqRes;if(f>=b.min&&f<b.max){const l=Math.pow(10,dB[i]/20);e+=l*l;}}
+    tot+=e; return e;
+  });
+  document.getElementById('bandGrid').innerHTML=bands.map((b,i)=>{
+    const pct=tot>0?Math.round(en[i]/tot*100):0;
+    return`<div class="band-card ${b.cls}"><div class="band-name">${b.name}</div><div class="band-range">${b.range}</div><div class="band-bar"><div class="band-fill" style="width:${pct}%"></div></div><div class="band-pct">${pct}%</div></div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════
+// RENDER TABLE
+// ══════════════════════════════════════════════
+function renderTable(classified,f0){
+  document.getElementById('peakCount').textContent=classified.length+' puncak';
+
+  // sort: fund → harm by number → others by db
+  const sorted=[...classified].sort((a,b)=>{
+    const ord={fund:0,harm:1,other:2};
+    if(ord[a.type]!==ord[b.type]) return ord[a.type]-ord[b.type];
+    if(a.type==='harm'&&b.type==='harm') return a.harmN-b.harmN;
+    return b.db-a.db;
+  });
+
+  document.getElementById('freqTableBody').innerHTML=sorted.map((p,i)=>{
+    const note=freqToNote(p.freq);
+    const pct=Math.max(0,Math.min(100,((p.db-(-80))/80)*100));
+    const fl=p.freq>=1000?(p.freq/1000).toFixed(3)+' kHz':p.freq.toFixed(1)+' Hz';
+    const rowCls=p.type==='fund'?'row-fund':p.type==='harm'?'row-harm':'row-other';
+
+    let badge;
+    if(p.type==='fund')
+      badge=`<span class="type-badge badge-fund"><span class="badge-dot"></span>F₀ Fundamental</span>`;
+    else if(p.type==='harm')
+      badge=`<span class="type-badge badge-harm"><span class="badge-dot"></span>H${p.harmN} Harmonik-${p.harmN}</span>`;
+    else
+      badge=`<span class="type-badge badge-other"><span class="badge-dot"></span>Parsial</span>`;
+
+    const ratioStr=p.ratio!=null?`×${p.ratio.toFixed(2)}`:'—';
+    const freqForBtn=p.freq;
+
+    return`<tr class="${rowCls}" data-freq="${p.freq}">
+      <td><input type="checkbox" class="chord-check" id="chk-${i}"
+        onchange="chordCheckChange(${freqForBtn}, ${i}, this)"
+        title="Tambah ke chord"></td>
+      <td style="color:var(--muted);font-size:11px">${i+1}</td>
+      <td class="freq-val">${fl}</td>
+      <td>${badge}</td>
+      <td style="font-size:11px;color:var(--muted)">${ratioStr}</td>
+      <td>${note?`<span class="note-badge">${note}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
+      <td style="color:var(--muted)">${p.db.toFixed(1)}</td>
+      <td class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:${pct.toFixed(1)}%"></div></div></td>
+      <td><button class="play-btn" id="pbtn-${i}" onclick="toggleSine(${freqForBtn},${i})">
+        <svg viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9"/></svg>
+        ${freqForBtn>=1000?(freqForBtn/1000).toFixed(2)+'k':Math.round(freqForBtn)} Hz
+      </button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════
+// SINE WAVE PLAYBACK
+// ══════════════════════════════════════════════
+function getPlayCtx(){
+  if(!playCtx||playCtx.state==='closed') playCtx=new AudioCtxCtor();
+  return playCtx;
+}
+function toggleSine(freq,idx){
+  const btn=document.getElementById('pbtn-'+idx);
+  if(!btn) return;
+  if(btn.classList.contains('playing')){stopSine();return;}
+  stopSine();
+  const vol=parseFloat(document.getElementById('volSlider').value);
+  const dur=parseFloat(document.getElementById('durSlider').value);
+  const ctx=getPlayCtx();
+  const osc=ctx.createOscillator(), gain=ctx.createGain();
+  osc.type='sine';
+  osc.frequency.setValueAtTime(freq,ctx.currentTime);
+  gain.gain.setValueAtTime(0,ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(vol,ctx.currentTime+0.015);
+  gain.gain.setValueAtTime(vol,ctx.currentTime+dur-0.04);
+  gain.gain.linearRampToValueAtTime(0,ctx.currentTime+dur);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(); osc.stop(ctx.currentTime+dur);
+  activeOsc=osc; activeBtn=btn;
+  btn.classList.add('playing');
+  btn.innerHTML=`<svg viewBox="0 0 10 10"><rect x="2" y="1" width="2.5" height="8"/><rect x="5.5" y="1" width="2.5" height="8"/></svg> ♪ main`;
+  osc.onended=()=>{
+    if(activeBtn===btn){
+      btn.classList.remove('playing');
+      const f=parseFloat(btn.closest('tr').dataset.freq);
+      btn.innerHTML=`<svg viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9"/></svg> ${f>=1000?(f/1000).toFixed(2)+'k':Math.round(f)} Hz`;
+      activeOsc=null; activeBtn=null;
+    }
+  };
+}
+function stopSine(){
+  if(activeOsc){try{activeOsc.stop();}catch(e){}activeOsc=null;}
+  if(activeBtn){
+    activeBtn.classList.remove('playing');
+    const f=parseFloat(activeBtn.closest('tr')?.dataset?.freq||'0');
+    activeBtn.innerHTML=`<svg viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9"/></svg> ${f>=1000?(f/1000).toFixed(2)+'k':Math.round(f)} Hz`;
+    activeBtn=null;
+  }
+}
+
+// ══════════════════════════════════════════════
+// CHORD ENGINE
+// ══════════════════════════════════════════════
+let chordFreqs  = [];   // [{freq, idx, type}]
+let chordOscs   = [];   // active oscillator nodes
+let chordGains  = [];   // active gain nodes
+let chordPlaying= false;
+
+document.getElementById('chordDurSlider').addEventListener('input', function(){
+  document.getElementById('chordDurVal').textContent = parseFloat(this.value).toFixed(1)+'s';
+});
+
+function chordCheckChange(freq, idx, checkbox){
+  stopChord();
+  if(checkbox.checked){
+    if(chordFreqs.length >= 6){
+      checkbox.checked = false;
+      return;
+    }
+    // determine type from row class
+    const row = checkbox.closest('tr');
+    const type = row.classList.contains('row-fund') ? 'fund'
+               : row.classList.contains('row-harm') ? 'harm' : 'other';
+    chordFreqs.push({freq, idx, type});
+  } else {
+    chordFreqs = chordFreqs.filter(f => f.idx !== idx);
+  }
+  renderChordSlots();
+}
+
+function renderChordSlots(){
+  const bar   = document.getElementById('chordBar');
+  const slots = document.getElementById('chordSlots');
+  const btn   = document.getElementById('btnChordPlay');
+
+  // always show chord bar once any analysis is done
+  bar.classList.add('show');
+
+  if(chordFreqs.length === 0){
+    slots.innerHTML = `<span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)">
+      Centang frekuensi di tabel untuk membangun chord (maks 6)
+    </span>`;
+    btn.disabled = true;
+    document.getElementById('btnChordExport').disabled = true;
+    document.getElementById('chordExportStatus').classList.remove('show');
+    return;
+  }
+
+  slots.innerHTML = chordFreqs.map(f => {
+    const fl  = f.freq>=1000 ? (f.freq/1000).toFixed(2)+'k' : Math.round(f.freq)+'';
+    const cls = f.type==='fund' ? 'fund-slot' : f.type==='harm' ? 'harm-slot' : '';
+    return `<span class="chord-slot filled ${cls}">
+      ♪ ${fl} Hz
+      <button class="chord-slot-remove" onclick="removeChordSlot(${f.idx})" title="Hapus">×</button>
+    </span>`;
+  }).join('');
+  btn.disabled = false;
+  document.getElementById('btnChordExport').disabled = false;
+}
+
+function removeChordSlot(idx){
+  stopChord();
+  chordFreqs = chordFreqs.filter(f => f.idx !== idx);
+  // uncheck the checkbox
+  const chk = document.getElementById('chk-'+idx);
+  if(chk) chk.checked = false;
+  renderChordSlots();
+}
+
+function clearChord(){
+  stopChord();
+  chordFreqs.forEach(f => {
+    const chk = document.getElementById('chk-'+f.idx);
+    if(chk) chk.checked = false;
+  });
+  chordFreqs = [];
+  renderChordSlots();
+}
+
+function toggleChord(){
+  chordPlaying ? stopChord() : playChord();
+}
+
+function playChord(){
+  if(!chordFreqs.length) return;
+  stopSine();   // stop any single-note playback first
+  stopChord();
+
+  const vol  = parseFloat(document.getElementById('volSlider').value);
+  const dur  = parseFloat(document.getElementById('chordDurSlider').value);
+  const ctx  = getPlayCtx();
+  // Each oscillator gets vol divided by sqrt(n) to avoid clipping
+  const perVol = vol / Math.sqrt(chordFreqs.length);
+
+  chordFreqs.forEach(f => {
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(f.freq, ctx.currentTime);
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(perVol, ctx.currentTime + 0.02);
+    gain.gain.setValueAtTime(perVol, ctx.currentTime + dur - 0.05);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + dur);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + dur);
+    chordOscs.push(osc); chordGains.push(gain);
+  });
+
+  chordPlaying = true;
+  const btn = document.getElementById('btnChordPlay');
+  btn.classList.add('playing');
+  btn.innerHTML = `<svg width="11" height="11" viewBox="0 0 10 10" fill="white"><rect x="1" y="1" width="3" height="8"/><rect x="6" y="1" width="3" height="8"/></svg> ■ Stop Chord`;
+
+  // auto-reset after duration
+  setTimeout(() => {
+    if(chordPlaying) stopChord();
+  }, dur * 1000 + 100);
+}
+
+function stopChord(){
+  chordOscs.forEach(o => { try{ o.stop(); }catch(e){} });
+  chordOscs  = [];
+  chordGains = [];
+  chordPlaying = false;
+  const btn = document.getElementById('btnChordPlay');
+  if(btn){
+    btn.classList.remove('playing');
+    btn.innerHTML = `<svg width="11" height="11" viewBox="0 0 10 10" fill="white"><polygon points="2,1 9,5 2,9"/></svg> Play Chord`;
+  }
+}
+
+// ══════════════════════════════════════════════
+// EXPORT CHORD WAV FOR LMMS
+// Generates two files:
+//   1. chord_oneshot.wav  — percussive envelope (attack+decay)
+//   2. chord_loop.wav     — seamless looping pad
+// ══════════════════════════════════════════════
+function exportChordWAV(){
+  if(!chordFreqs.length) return;
+
+  const SR       = 44100;
+  const dur      = parseFloat(document.getElementById('chordDurSlider').value);
+  const vol      = parseFloat(document.getElementById('volSlider').value);
+  const perVol   = vol / Math.sqrt(chordFreqs.length);
+  const freqs    = chordFreqs.map(f => f.freq);
+
+  // ── 1. One-shot: percussive envelope ──
+  //    Attack 15ms → full → exponential decay over dur
+  const oneShotBuf = renderChordBuffer(freqs, SR, dur, perVol, 'oneshot');
+
+  // ── 2. Loop: flat body with seamless loop points ──
+  //    Loop duration chosen so ALL sine waves complete whole cycles
+  //    → no phase discontinuity at loop boundary
+  const loopDur  = findSeamlessLoopDuration(freqs, SR, 2.0); // target ~2s
+  const loopBuf  = renderChordBuffer(freqs, SR, loopDur, perVol, 'loop');
+
+  // Download both
+  const src = document.getElementById('srcName').textContent
+    .replace(/[^a-z0-9]/gi,'_').slice(0,30) || 'chord';
+  const freqLabel = freqs.map(f => Math.round(f)).join('-');
+
+  downloadWAV(oneShotBuf, SR, `${src}_${freqLabel}_oneshot.wav`);
+  setTimeout(() => downloadWAV(loopBuf, SR, `${src}_${freqLabel}_loop.wav`), 300);
+
+  // Status chips
+  const status = document.getElementById('chordExportStatus');
+  status.innerHTML = `
+    <div class="export-file-chip">
+      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+      ${src}_${freqLabel}_oneshot.wav · ${dur.toFixed(1)}s · percussive
+    </div>
+    <div class="export-file-chip">
+      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+      ${src}_${freqLabel}_loop.wav · ${loopDur.toFixed(3)}s · seamless loop
+    </div>
+    <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);width:100%;line-height:1.6">
+      Import ke LMMS: <b>Beat+Bassline</b> (oneshot) · <b>AudioFileProcessor → loop mode</b> (loop)
+    </div>`;
+  status.classList.add('show');
+
+  // Brief button feedback
+  const btn = document.getElementById('btnChordExport');
+  btn.classList.add('done');
+  btn.innerHTML = `<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Tersimpan!`;
+  setTimeout(() => {
+    btn.classList.remove('done');
+    btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export WAV (LMMS)`;
+  }, 3000);
+}
+
+// ── Render a chord into a Float32Array PCM buffer ──
+function renderChordBuffer(freqs, SR, dur, perVol, mode){
+  const nSamples = Math.ceil(SR * dur);
+  const buf      = new Float32Array(nSamples);
+
+  // Distribute initial phases evenly to reduce constructive interference peaks
+  freqs.forEach((freq, fi) => {
+    const phase0 = (fi / freqs.length) * 2 * Math.PI;
+    for(let i = 0; i < nSamples; i++){
+      const t   = i / SR;
+      let env;
+      if(mode === 'oneshot'){
+        // Attack 15ms, then exponential decay
+        const attack = Math.min(1, t / 0.015);
+        const decay  = Math.exp(-3.5 * t / dur);
+        env = attack * decay;
+      } else {
+        // Loop: 10ms fade-in, flat body, 10ms fade-out for crossfade
+        const fadeIn  = Math.min(1, t / 0.01);
+        const fadeOut = Math.min(1, (dur - t) / 0.01);
+        env = Math.min(fadeIn, fadeOut);
+      }
+      buf[i] += Math.sin(2 * Math.PI * freq * t + phase0) * perVol * env;
+    }
+  });
+
+  // Soft clip to prevent any rare peaks above ±1
+  for(let i = 0; i < nSamples; i++){
+    const x = buf[i];
+    buf[i] = x / (1 + Math.abs(x) * 0.3);
+  }
+
+  return buf;
+}
+
+// ── Find loop duration where all sines complete whole cycles ──
+// Looks for smallest duration ≥ targetSec where
+// phase error at loop point < threshold for all freqs
+function findSeamlessLoopDuration(freqs, SR, targetSec){
+  const PHASE_TOL = 0.02; // radians
+  // Try durations = multiples of sample periods near target
+  for(let n = Math.ceil(targetSec * SR); n < targetSec * SR * 3; n++){
+    const t = n / SR;
+    const ok = freqs.every(f => {
+      const cycles = f * t;
+      const err = Math.abs(cycles - Math.round(cycles));
+      return err < PHASE_TOL;
+    });
+    if(ok) return t;
+  }
+  // Fallback: just use target duration (near-seamless)
+  return targetSec;
+}
+
+// ── Encode Float32 PCM → WAV ArrayBuffer and trigger download ──
+function downloadWAV(pcm, SR, filename){
+  const nSamples     = pcm.length;
+  const bitsPerSample= 16;
+  const nCh          = 1;
+  const byteRate     = SR * nCh * bitsPerSample / 8;
+  const dataLen      = nSamples * nCh * bitsPerSample / 8;
+  const buf          = new ArrayBuffer(44 + dataLen);
+  const v            = new DataView(buf);
+  const writeStr     = (off, s) => { for(let i=0;i<s.length;i++) v.setUint8(off+i, s.charCodeAt(i)); };
+
+  writeStr(0,'RIFF'); v.setUint32(4, 36+dataLen, true);
+  writeStr(8,'WAVE'); writeStr(12,'fmt ');
+  v.setUint32(16, 16, true);   // chunk size
+  v.setUint16(20, 1, true);    // PCM
+  v.setUint16(22, nCh, true);
+  v.setUint32(24, SR, true);
+  v.setUint32(28, byteRate, true);
+  v.setUint16(32, nCh * bitsPerSample/8, true);
+  v.setUint16(34, bitsPerSample, true);
+  writeStr(36,'data'); v.setUint32(40, dataLen, true);
+
+  let pos = 44;
+  for(let i = 0; i < nSamples; i++){
+    const s = Math.max(-1, Math.min(1, pcm[i]));
+    v.setInt16(pos, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    pos += 2;
+  }
+
+  const blob = new Blob([buf], {type:'audio/wav'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+// ══════════════════════════════════════════════
+// FREQ → MUSICAL NOTE
+// ══════════════════════════════════════════════
+function freqToNote(freq){
+  if(freq<16||freq>8000) return null;
+  const notes=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const st=Math.round(12*Math.log2(freq/440));
+  const ni=((st%12)+12+9)%12, oct=Math.floor((st+57)/12);
+  const c=Math.round((12*Math.log2(freq/440)-st)*100);
+  return`${notes[ni]}${oct}${c?' '+(c>0?'+':'')+c+'¢':''}`;
+}
+
+// ══════════════════════════════════════════════
+// BUILD RESULT OBJECT (for JSON export)
+// ══════════════════════════════════════════════
+async function buildResultObject(classified, f0, freqRes, sr, startSec, endSec, dB, bins){
+  // band energies
+  const bandDefs=[
+    {name:'bass',min:20,max:250},{name:'midrange',min:250,max:2000},
+    {name:'treble',min:2000,max:8000},{name:'air',min:8000,max:20000},
+  ];
+  let totE=0;
+  const bandEnergies=bandDefs.map(b=>{
+    let e=0;
+    for(let i=1;i<bins;i++){const f=i*freqRes;if(f>=b.min&&f<b.max){const l=Math.pow(10,dB[i]/20);e+=l*l;}}
+    totE+=e; return{...b,energy:e};
+  });
+
+  // dominant freq
+  let mxDb=-120,mxF=0;
+  for(let i=1;i<bins;i++) if(dB[i]>mxDb){mxDb=dB[i];mxF=i*freqRes;}
+
+  // encode the analysed audio segment as WAV base64
+  let audio_wav_b64 = null;
+  try {
+    const s0=Math.floor(startSec*sr), s1=Math.floor(endSec*sr);
+    const nCh=audioBuffer.numberOfChannels;
+    const nSamples=s1-s0;
+    const wavBuf=encodeWAV(audioBuffer, s0, nSamples, sr, nCh);
+    const bytes=new Uint8Array(wavBuf);
+    let bin='';
+    for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]);
+    audio_wav_b64 = btoa(bin);
+  } catch(e){ console.warn('audio encode failed',e); }
+
+  return {
+    metadata: {
+      exported_at: new Date().toISOString(),
+      source: document.getElementById('srcName').textContent,
+      sample_rate_hz: sr,
+      analysis_range_sec: { start: startSec, end: endSec, duration: parseFloat((endSec-startSec).toFixed(3)) },
+      fft_resolution_hz: parseFloat(freqRes.toFixed(4)),
+    },
+    summary: {
+      fundamental_f0_hz: parseFloat(f0.toFixed(2)),
+      dominant_frequency_hz: parseFloat(mxF.toFixed(2)),
+      peak_count: classified.length,
+      harmonic_count: classified.filter(p=>p.type==='harm').length,
+      partial_count: classified.filter(p=>p.type==='other').length,
+    },
+    band_energy_percent: Object.fromEntries(
+      bandEnergies.map(b=>[ b.name, totE>0?parseFloat((b.energy/totE*100).toFixed(1)):0 ])
+    ),
+    frequencies: classified
+      .sort((a,b)=>{ const o={fund:0,harm:1,other:2}; if(o[a.type]!==o[b.type])return o[a.type]-o[b.type]; if(a.type==='harm'&&b.type==='harm')return a.harmN-b.harmN; return b.db-a.db; })
+      .map((p,i)=>({
+        rank: i+1,
+        frequency_hz: p.freq,
+        type: p.type==='fund'?'fundamental': p.type==='harm'?`harmonic_H${p.harmN}`:'partial',
+        harmonic_number: p.harmN,
+        ratio_to_f0: p.ratio!=null?parseFloat(p.ratio.toFixed(4)):null,
+        amplitude_db: p.db,
+        musical_note: freqToNote(p.freq),
+      })),
+    audio_wav_b64,   // WAV of the analysed segment — may be null for very large files
+  };
+}
+
+// ══════════════════════════════════════════════
+// ENCODE WAV
+// ══════════════════════════════════════════════
+function encodeWAV(abuf, offset, nSamples, sr, nCh){
+  const bitsPerSample=16, byteRate=sr*nCh*(bitsPerSample/8);
+  const dataLen=nSamples*nCh*(bitsPerSample/8);
+  const buf=new ArrayBuffer(44+dataLen);
+  const v=new DataView(buf);
+  const writeStr=(off,s)=>{for(let i=0;i<s.length;i++)v.setUint8(off+i,s.charCodeAt(i));};
+  writeStr(0,'RIFF'); v.setUint32(4,36+dataLen,true);
+  writeStr(8,'WAVE'); writeStr(12,'fmt ');
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,nCh,true);
+  v.setUint32(24,sr,true); v.setUint32(28,byteRate,true);
+  v.setUint16(32,nCh*(bitsPerSample/8),true); v.setUint16(34,bitsPerSample,true);
+  writeStr(36,'data'); v.setUint32(40,dataLen,true);
+  // interleave channels
+  let pos=44;
+  const channels=[];
+  for(let c=0;c<nCh;c++) channels.push(abuf.getChannelData(c));
+  for(let i=0;i<nSamples;i++){
+    for(let c=0;c<nCh;c++){
+      const s=Math.max(-1,Math.min(1,channels[c][offset+i]));
+      v.setInt16(pos, s<0?s*0x8000:s*0x7FFF, true); pos+=2;
+    }
+  }
+  return buf;
+}
+
+// ══════════════════════════════════════════════
+// EXPORT JSON
+// ══════════════════════════════════════════════
+function exportJSON(){
+  if(!lastResult) return;
+  const json = JSON.stringify(lastResult, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const src  = document.getElementById('srcName').textContent.replace(/[^a-z0-9]/gi,'_').slice(0,40);
+  const ts   = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+  a.href     = url;
+  a.download = `frekuensi_${src}_${ts}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  // brief visual feedback
+  const btn = document.getElementById('btnExport');
+  btn.classList.add('done');
+  btn.innerHTML=`<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Tersimpan!`;
+  setTimeout(()=>{
+    btn.classList.remove('done');
+    btn.innerHTML=`<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Simpan JSON`;
+  }, 2500);
+}
+
+// ══════════════════════════════════════════════
+// COLORMAPS
+// ══════════════════════════════════════════════
+const COLORMAPS = {
+  inferno: [
+    [0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],
+    [245,125,21],[252,193,7],[252,255,164],[255,255,255]
+  ],
+  viridis: [
+    [68,1,84],[72,40,120],[62,83,160],[49,123,173],[38,173,166],
+    [53,183,121],[109,205,89],[180,222,44],[253,231,37]
+  ],
+  plasma: [
+    [13,8,135],[84,2,163],[139,10,165],[185,50,137],[219,92,104],
+    [244,136,73],[254,188,43],[240,249,33],[255,255,255]
+  ],
+  cyan: [
+    [0,0,30],[0,20,60],[0,60,100],[0,120,140],[0,200,180],
+    [0,245,196],[100,255,220],[200,255,240],[255,255,255]
+  ]
+};
+
+function colormap(t, name){
+  const stops = COLORMAPS[name] || COLORMAPS.inferno;
+  const idx   = t * (stops.length-1);
+  const lo    = Math.floor(idx), hi = Math.min(lo+1, stops.length-1);
+  const frac  = idx - lo;
+  const a = stops[lo], b = stops[hi];
+  return [
+    Math.round(a[0]+(b[0]-a[0])*frac),
+    Math.round(a[1]+(b[1]-a[1])*frac),
+    Math.round(a[2]+(b[2]-a[2])*frac)
+  ];
+}
+
+// update gradient swatch when colormap changes
+function updateSgramGrad(){
+  const name = document.getElementById('stftColormap').value;
+  const canvas = document.createElement('canvas');
+  canvas.width=120; canvas.height=1;
+  const ctx=canvas.getContext('2d');
+  const img=ctx.createImageData(120,1);
+  for(let x=0;x<120;x++){
+    const [r,g,b]=colormap(x/119, name);
+    img.data[x*4]=r; img.data[x*4+1]=g; img.data[x*4+2]=b; img.data[x*4+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+  document.getElementById('sgramGrad').style.background=`url(${canvas.toDataURL()})`;
+}
+updateSgramGrad();
+
+// re-draw when controls change
+['stftWindow','stftMaxFreq','stftColormap'].forEach(id=>{
+  document.getElementById(id).addEventListener('change',()=>{
+    if(id==='stftColormap') updateSgramGrad();
+    if(lastMono) drawSpectrogram(lastMono, lastMonoSr, lastMonoStart, lastMonoEnd);
+  });
+});
+
+let lastMono=null, lastMonoSr=0, lastMonoStart=0, lastMonoEnd=0;
+
+// ══════════════════════════════════════════════
+// DRAW SPECTROGRAM  (STFT)
+// ══════════════════════════════════════════════
+function drawSpectrogram(mono, sr, startSec, endSec){
+  // cache for re-draw on control change
+  lastMono=mono; lastMonoSr=sr; lastMonoStart=startSec; lastMonoEnd=endSec;
+
+  const fftSize  = parseInt(document.getElementById('stftWindow').value);
+  const maxFreq  = parseInt(document.getElementById('stftMaxFreq').value) || sr/2;
+  const cmap     = document.getElementById('stftColormap').value;
+  const hop      = Math.floor(fftSize/4);         // 75% overlap
+  const dpr      = window.devicePixelRatio||1;
+  const cvs      = document.getElementById('spectrogramCanvas');
+  const dispW    = cvs.offsetWidth||900;
+  const dispH    = 200;
+  cvs.width      = dispW*dpr;
+  cvs.height     = dispH*dpr;
+  const ctx      = cvs.getContext('2d');
+  ctx.scale(dpr,dpr);
+
+  const pad = {l:50, r:16, t:6, b:30};
+  const pw  = dispW - pad.l - pad.r;
+  const ph  = dispH - pad.t - pad.b;
+
+  ctx.fillStyle='#0a0c14'; ctx.fillRect(0,0,dispW,dispH);
+
+  // Hann window coeffs
+  const hann = new Float32Array(fftSize);
+  for(let i=0;i<fftSize;i++) hann[i]=.5*(1-Math.cos(2*Math.PI*i/(fftSize-1)));
+
+  // number of frames
+  const nFrames = Math.floor((mono.length-fftSize)/hop)+1;
+  if(nFrames<1) return;
+
+  const binsTotal = fftSize/2;
+  const maxBin    = Math.round(maxFreq/(sr/fftSize));
+  const useBins   = Math.min(maxBin, binsTotal);
+
+  // build pixel columns
+  const imageData = ctx.createImageData(pw, ph);
+  const colWidth  = pw / nFrames;
+
+  // pre-allocate
+  const reArr=new Float64Array(fftSize), imArr=new Float64Array(fftSize);
+
+  for(let f=0;f<nFrames;f++){
+    const offset = f*hop;
+
+    // windowed frame
+    for(let i=0;i<fftSize;i++){
+      reArr[i]=(mono[offset+i]||0)*hann[i];
+      imArr[i]=0;
+    }
+
+    // in-place FFT
+    fftInPlace(reArr, imArr, fftSize);
+
+    // magnitude in dB
+    const dbMin=-80, dbMax=0;
+    const x0 = Math.round(f*colWidth);
+    const x1 = Math.round((f+1)*colWidth);
+
+    for(let b=0;b<useBins;b++){
+      const mag=Math.sqrt(reArr[b]*reArr[b]+imArr[b]*imArr[b]);
+      const db =mag>0?Math.max(dbMin,20*Math.log10(mag)):dbMin;
+      const t  =Math.max(0,Math.min(1,(db-dbMin)/(dbMax-dbMin)));
+      const [r,g,bl]=colormap(t,cmap);
+      // bin b → pixel row (bottom = low freq)
+      const y0=Math.round(ph - (b+1)/useBins*ph);
+      const y1=Math.round(ph - b/useBins*ph);
+      for(let py=y0;py<y1;py++){
+        for(let px=x0;px<x1;px++){
+          const idx=(py*pw+px)*4;
+          imageData.data[idx]=r; imageData.data[idx+1]=g;
+          imageData.data[idx+2]=bl; imageData.data[idx+3]=255;
+        }
+      }
+    }
+  }
+  ctx.putImageData(imageData, pad.l, pad.t);
+
+  // ── Axis labels ──
+  ctx.font='9px Space Mono'; ctx.fillStyle='rgba(90,96,128,.8)';
+
+  // Y axis — frequency
+  const freqTicks=[100,200,500,1000,2000,4000,8000,12000].filter(f=>f<=maxFreq);
+  freqTicks.forEach(f=>{
+    const y=pad.t + ph - (f/maxFreq)*ph;
+    ctx.fillStyle='rgba(255,255,255,.07)';
+    ctx.fillRect(pad.l,y,pw,1);
+    ctx.fillStyle='rgba(90,96,128,.8)';
+    ctx.textAlign='right';
+    ctx.fillText(f>=1000?(f/1000)+'k':f, pad.l-4, y+3);
+  });
+
+  // X axis — time
+  const dur=endSec-startSec;
+  const timeTicks=[];
+  const step=dur<=1?.1:dur<=5?.5:dur<=10?1:2;
+  for(let t=0;t<=dur+.001;t+=step) timeTicks.push(parseFloat(t.toFixed(2)));
+  timeTicks.forEach(t=>{
+    const x=pad.l+Math.min(t/dur,1)*pw;
+    ctx.fillStyle='rgba(255,255,255,.07)'; ctx.fillRect(x,pad.t,1,ph);
+    ctx.fillStyle='rgba(90,96,128,.8)'; ctx.textAlign='center';
+    ctx.fillText((startSec+t).toFixed(1)+'s', x, pad.t+ph+18);
+  });
+
+  ctx.fillStyle='rgba(90,96,128,.6)'; ctx.textAlign='center';
+  ctx.fillText('Waktu (detik)', pad.l+pw/2, dispH-2);
+  ctx.save(); ctx.translate(10, pad.t+ph/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center'; ctx.fillText('Hz', 0, 0); ctx.restore();
+
+  // ── Slide detection ──
+  detectSlides(reArr, imArr, mono, sr, nFrames, hop, fftSize, useBins, maxFreq, startSec, dur, colWidth, pad, pw, ph, ctx, cmap);
+
+  // ── Tooltip on hover ──
+  cvs.onmousemove = e=>{
+    const rect=cvs.getBoundingClientRect();
+    const mx=(e.clientX-rect.left)*(cvs.width/dpr/rect.width)-pad.l;
+    const my=(e.clientY-rect.top)*(cvs.height/dpr/rect.height)-pad.t;
+    if(mx<0||mx>pw||my<0||my>ph){document.getElementById('sgramTooltip').textContent='';return;}
+    const tSec=startSec+(mx/pw)*dur;
+    const freq =(1-(my/ph))*maxFreq;
+    document.getElementById('sgramTooltip').textContent=
+      `t=${tSec.toFixed(3)}s  f=${freq>=1000?(freq/1000).toFixed(2)+'kHz':Math.round(freq)+'Hz'}`;
+  };
+  cvs.onmouseleave=()=>{ document.getElementById('sgramTooltip').textContent=''; };
+}
+
+// ══════════════════════════════════════════════
+// IN-PLACE FFT (mutates re/im arrays)
+// ══════════════════════════════════════════════
+function fftInPlace(re, im, n){
+  let j=0;
+  for(let i=1;i<n;i++){
+    let bit=n>>1; for(;j&bit;bit>>=1)j^=bit; j^=bit;
+    if(i<j){[re[i],re[j]]=[re[j],re[i]];[im[i],im[j]]=[im[j],im[i]];}
+  }
+  for(let len=2;len<=n;len<<=1){
+    const ang=-2*Math.PI/len,wR=Math.cos(ang),wI=Math.sin(ang);
+    for(let i=0;i<n;i+=len){
+      let cR=1,cI=0;
+      for(let k=0;k<len/2;k++){
+        const uR=re[i+k],uI=im[i+k];
+        const vR=re[i+k+len/2]*cR-im[i+k+len/2]*cI;
+        const vI=re[i+k+len/2]*cI+im[i+k+len/2]*cR;
+        re[i+k]=uR+vR; im[i+k]=uI+vI;
+        re[i+k+len/2]=uR-vR; im[i+k+len/2]=uI-vI;
+        [cR,cI]=[cR*wR-cI*wI,cR*wI+cI*wR];
+      }
+    }
+  }
+}
+
+// ══════════════════════════════════════════════
+// SLIDE / PITCH CONTOUR DETECTION
+// Lacak puncak dominan per frame → deteksi
+// pergerakan frekuensi yang signifikan
+// ══════════════════════════════════════════════
+function detectSlides(reArr, imArr, mono, sr, nFrames, hop, fftSize, useBins, maxFreq, startSec, dur, colWidth, pad, pw, ph, ctx, cmap){
+  const re2=new Float64Array(fftSize), im2=new Float64Array(fftSize);
+  const hann=new Float32Array(fftSize);
+  for(let i=0;i<fftSize;i++) hann[i]=.5*(1-Math.cos(2*Math.PI*i/(fftSize-1)));
+
+  const freqRes=sr/fftSize;
+  const pitchTrack=[];   // [{t, freq, db}]
+
+  for(let f=0;f<nFrames;f++){
+    const offset=f*hop;
+    for(let i=0;i<fftSize;i++){re2[i]=(mono[offset+i]||0)*hann[i];im2[i]=0;}
+    fftInPlace(re2,im2,fftSize);
+
+    // find dominant bin in useBins range (skip DC)
+    let bestMag=0, bestBin=1;
+    for(let b=Math.ceil(60/freqRes);b<useBins;b++){
+      const m=re2[b]*re2[b]+im2[b]*im2[b];
+      if(m>bestMag){bestMag=m;bestBin=b;}
+    }
+    const freq=bestBin*freqRes;
+    const db  =bestMag>0?20*Math.log10(Math.sqrt(bestMag)):-120;
+    const t   =startSec+(f/nFrames)*dur;
+    pitchTrack.push({t,freq,db});
+  }
+
+  // ── Draw pitch contour on spectrogram ──
+  ctx.save();
+  ctx.strokeStyle='rgba(255,255,255,.55)';
+  ctx.lineWidth=1.5;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  let firstPt=true;
+  pitchTrack.forEach((pt,i)=>{
+    if(pt.db<-70){firstPt=true;return;}  // silence — break line
+    const x=pad.l+(i/nFrames)*pw;
+    const y=pad.t+ph-(pt.freq/maxFreq)*ph;
+    if(y<pad.t||y>pad.t+ph){firstPt=true;return;}
+    firstPt?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    firstPt=false;
+  });
+  ctx.stroke();
+  ctx.restore();
+
+  // ── Detect slides: segments where pitch moves > threshold ──
+  const SLIDE_THRESH_CENTS = 50;   // >50 cents change across window
+  const MIN_SLIDE_FRAMES   = 3;    // must persist ≥3 frames
+  const slides = [];
+  let slideStart=null;
+
+  for(let i=1;i<pitchTrack.length;i++){
+    const prev=pitchTrack[i-1], curr=pitchTrack[i];
+    if(prev.db<-65||curr.db<-65){slideStart=null;continue;}
+    if(prev.freq<=0||curr.freq<=0){slideStart=null;continue;}
+    const cents=Math.abs(1200*Math.log2(curr.freq/prev.freq));
+    if(cents>SLIDE_THRESH_CENTS){
+      if(!slideStart) slideStart={idx:i-1,...prev};
+    } else {
+      if(slideStart){
+        const frames=i-slideStart.idx;
+        if(frames>=MIN_SLIDE_FRAMES){
+          const endPt=pitchTrack[i-1];
+          const direction=endPt.freq>slideStart.freq?'naik':'turun';
+          const centsMoved=Math.round(Math.abs(1200*Math.log2(endPt.freq/slideStart.freq)));
+          slides.push({
+            t_start: slideStart.t, t_end: endPt.t,
+            freq_start: slideStart.freq, freq_end: endPt.freq,
+            direction, cents: centsMoved,
+            startIdx: slideStart.idx, endIdx: i-1
+          });
+        }
+        slideStart=null;
+      }
+    }
+  }
+
+  // ── Highlight slide segments on spectrogram ──
+  slides.forEach(sl=>{
+    const x0=pad.l+(sl.startIdx/nFrames)*pw;
+    const x1=pad.l+(sl.endIdx/nFrames)*pw;
+    ctx.save();
+    ctx.fillStyle='rgba(255,160,0,.12)';
+    ctx.fillRect(x0,pad.t,x1-x0,ph);
+    ctx.strokeStyle='rgba(255,160,0,.7)';
+    ctx.lineWidth=1;
+    ctx.setLineDash([3,2]);
+    ctx.strokeRect(x0,pad.t,x1-x0,ph);
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,160,0,.9)';
+    ctx.font='bold 9px Space Mono';
+    ctx.textAlign='center';
+    const arrow=sl.direction==='naik'?'↑':'↓';
+    ctx.fillText(`slide ${arrow}`,x0+(x1-x0)/2,pad.t+12);
+    ctx.restore();
+  });
+
+  // ── Render slide detection summary below canvas ──
+  const el = document.getElementById('slideResult');
+  if(slides.length===0){
+    el.innerHTML=`<div class="slide-badge slide-none">
+      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+      Tidak terdeteksi slide frekuensi yang signifikan dalam rentang ini
+    </div>`;
+  } else {
+    const chips = slides.map(sl=>{
+      const f0l=sl.freq_start>=1000?(sl.freq_start/1000).toFixed(2)+'kHz':Math.round(sl.freq_start)+'Hz';
+      const f1l=sl.freq_end  >=1000?(sl.freq_end  /1000).toFixed(2)+'kHz':Math.round(sl.freq_end  )+'Hz';
+      return`<span class="slide-chip">
+        ${sl.t_start.toFixed(2)}s ${f0l}→${f1l} ${sl.direction==='naik'?'↑':'↓'} ${sl.cents}¢
+      </span>`;
+    }).join('');
+    el.innerHTML=`<div class="slide-badge slide-detected">
+        <svg viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        Terdeteksi ${slides.length} segmen slide frekuensi
+      </div>
+      <div class="slide-list">${chips}</div>
+      <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);margin-top:6px;line-height:1.6">
+        Garis putih = kontur nada dominan per frame · kotak oranye = zona slide · ¢ = cents (100¢ = 1 semitone)
+      </div>`;
+  }
+}
+
+// ══════════════════════════════════════════════
+// METRONOME
+// ══════════════════════════════════════════════
+document.getElementById('bpmSlider').addEventListener('input',function(){
+  document.getElementById('bpmVal').textContent=this.value;
+});
+function getMetroCtx(){ if(!metroCtx||metroCtx.state==='closed') metroCtx=new AudioCtxCtor(); return metroCtx; }
+function toggleMetronome(){ metroRunning?stopMetronome():startMetronome(); }
+function startMetronome(){
+  metroRunning=true; metroBeat=0;
+  const ctx=getMetroCtx(); metroNextTime=ctx.currentTime+0.05;
+  metroScheduler=setInterval(scheduleMetro,25);
+  document.getElementById('btnMetro').classList.add('active');
+  document.getElementById('btnMetro').innerHTML=
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 12 11 12 11 19 13 19 13 12 18 12 13 5"/></svg> ■ Stop`;
+}
+function stopMetronome(){
+  metroRunning=false; clearInterval(metroScheduler);
+  document.getElementById('btnMetro').classList.remove('active');
+  document.getElementById('btnMetro').innerHTML=
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 12 11 12 11 19 13 19 13 12 18 12 13 5"/></svg> Metronome`;
+  [0,1,2,3].forEach(i=>{ const d=document.getElementById('md'+i); if(d) d.className='metro-dot'; });
+}
+function scheduleMetro(){
+  const ctx=getMetroCtx();
+  const bpm=parseInt(document.getElementById('bpmSlider').value);
+  const sig=parseInt(document.getElementById('timeSigSelect').value);
+  const beat=60/bpm;
+  while(metroNextTime<ctx.currentTime+0.1){
+    scheduleTick(ctx,metroNextTime,metroBeat%sig===0);
+    flashBeat(metroBeat%sig,sig);
+    metroBeat++; metroNextTime+=beat;
+  }
+}
+function scheduleTick(ctx,time,isAccent){
+  const osc=ctx.createOscillator(),gain=ctx.createGain();
+  osc.type='sine'; osc.frequency.value=isAccent?1200:800;
+  gain.gain.setValueAtTime(isAccent?.35:.18,time);
+  gain.gain.exponentialRampToValueAtTime(0.001,time+0.06);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(time); osc.stop(time+0.07);
+}
+function flashBeat(beatIdx,sig){
+  setTimeout(()=>{
+    [0,1,2,3].forEach(i=>{
+      const d=document.getElementById('md'+i); if(!d) return;
+      d.className='metro-dot'+(i===beatIdx?(beatIdx===0?' beat-1':' beat-n'):'');
+    });
+  },0);
+}
+
+// ══════════════════════════════════════════════
+// QUANTIZE
+// ══════════════════════════════════════════════
+function quantizeEvents(events,bpm,gridFraction){
+  if(!gridFraction||gridFraction<=0) return events;
+  const gridSec=(60/bpm)*gridFraction;
+  return events.map(e=>{
+    const snap=t=>Math.round(t/gridSec)*gridSec;
+    const newOn=snap(e.t_on);
+    const dur=Math.max(gridSec*.5,e.t_off-e.t_on);
+    return{...e,t_on:newOn,t_off:newOn+dur};
+  });
+}
+
+// ══════════════════════════════════════════════
+// MELODY KEYBOARD ENGINE
+// ══════════════════════════════════════════════
+document.getElementById('sustainSlider').addEventListener('input',function(){
+  document.getElementById('sustainVal').textContent=parseFloat(this.value).toFixed(2)+'s';
+});
+
+const KEY_ORDER=[
+  'z','x','c','v','b','n','m',',','.',
+  'a','s','d','f','g','h','j','k','l',
+  'q','w','e','r','t','y','u','i','o','p',
+  '1','2','3','4','5','6','7','8','9','0'
+];
+
+function buildMelodyKeyboard(classified){
+  const peaks=[...classified].sort((a,b)=>a.freq-b.freq);
+  melodyFreqs=peaks.slice(0,KEY_ORDER.length).map((p,i)=>({
+    freq:p.freq,key:KEY_ORDER[i],type:p.type,note:freqToNote(p.freq)||'—',db:p.db
+  }));
+  renderKeyGrid(); buildPianoRoll();
+  document.getElementById('melodyWrap').classList.add('show');
+}
+
+function renderKeyGrid(){
+  const grid=document.getElementById('keyGrid');
+  grid.innerHTML=melodyFreqs.map(k=>{
+    const fl=k.freq>=1000?(k.freq/1000).toFixed(2)+'k':Math.round(k.freq)+'';
+    const cls=k.type==='fund'?'fund-key':k.type==='harm'?'harm-key':'';
+    return`<div class="piano-key ${cls}" id="pkey-${k.key}"
+      onmousedown="keyDown('${k.key}')" onmouseup="keyUp('${k.key}')"
+      onmouseleave="keyUp('${k.key}')">
+      <span class="key-kb">${k.key.toUpperCase()}</span>
+      <span class="key-freq">${fl} Hz</span>
+      <span class="key-note">${k.note}</span>
+    </div>`;
+  }).join('');
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA') return;
+  if(e.repeat) return;
+  const k=e.key.toLowerCase();
+  if(melodyFreqs.find(f=>f.key===k)){e.preventDefault();keyDown(k);}
+});
+document.addEventListener('keyup',e=>{
+  const k=e.key.toLowerCase();
+  if(melodyFreqs.find(f=>f.key===k)) keyUp(k);
+});
+
+function keyDown(k){
+  if(melodyActiveKeys.has(k)) return;
+  const entry=melodyFreqs.find(f=>f.key===k); if(!entry) return;
+  melodyActiveKeys.add(k);
+  const ctx=getPlayCtx(),vol=parseFloat(document.getElementById('volSlider').value);
+  const osc=ctx.createOscillator(),gain=ctx.createGain();
+  osc.type='sine'; osc.frequency.setValueAtTime(entry.freq,ctx.currentTime);
+  gain.gain.setValueAtTime(0,ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(vol,ctx.currentTime+0.012);
+  osc.connect(gain); gain.connect(ctx.destination); osc.start();
+  melodyOscs[k]={osc,gain,freq:entry.freq};
+  document.getElementById('pkey-'+k)?.classList.add('active');
+  if(melodyRecording)
+    melodyEvents.push({freq:entry.freq,key:k,note:entry.note,type:entry.type,
+      t_on:(Date.now()-melodyRecStart)/1000,t_off:null});
+}
+
+function keyUp(k){
+  if(!melodyActiveKeys.has(k)) return;
+  melodyActiveKeys.delete(k);
+  const entry=melodyOscs[k]; if(!entry) return;
+  const ctx=getPlayCtx(),sustain=parseFloat(document.getElementById('sustainSlider').value);
+  entry.gain.cancelScheduledValues(ctx.currentTime);
+  entry.gain.setValueAtTime(entry.gain.value,ctx.currentTime);
+  entry.gain.linearRampToValueAtTime(0,ctx.currentTime+sustain);
+  try{entry.osc.stop(ctx.currentTime+sustain+0.01);}catch(e){}
+  delete melodyOscs[k];
+  document.getElementById('pkey-'+k)?.classList.remove('active');
+  if(melodyRecording){
+    const ev=[...melodyEvents].reverse().find(e=>e.key===k&&e.t_off===null);
+    if(ev) ev.t_off=(Date.now()-melodyRecStart)/1000;
+  }
+}
+
+function toggleMelodyRecord(){melodyRecording?stopMelodyRecord():startMelodyRecord();}
+function startMelodyRecord(){
+  Object.keys(melodyOscs).forEach(k=>keyUp(k));
+  melodyEvents=[]; melodyRecording=true; melodyRecStart=Date.now(); melodyActiveKeys.clear();
+  document.getElementById('btnMelodyRec').classList.add('recording');
+  document.getElementById('btnMelodyRec').innerHTML=
+    `<svg viewBox="0 0 24 24" style="fill:white;stroke:white"><circle cx="12" cy="12" r="8"/></svg> ● Merekam…`;
+  document.getElementById('btnMelodyStop').disabled=false;
+  document.getElementById('btnMelodyExport').disabled=true;
+  document.getElementById('melodyRecBadge').classList.add('active');
+  document.getElementById('melodyRecLabel').textContent='● REC';
+  document.getElementById('melodyTimer').classList.add('active');
+  melodyTimerInt=setInterval(()=>{
+    document.getElementById('melodyTimer').textContent=formatTime((Date.now()-melodyRecStart)/1000);
+  },100);
+}
+function stopMelodyRecord(){
+  const now=(Date.now()-melodyRecStart)/1000;
+  melodyEvents.forEach(e=>{if(e.t_off===null)e.t_off=now;});
+  Object.keys(melodyOscs).forEach(k=>keyUp(k));
+  melodyRecording=false; clearInterval(melodyTimerInt);
+  // quantize
+  const bpm=parseInt(document.getElementById('bpmSlider').value);
+  const qFrac=parseFloat(document.getElementById('quantizeSelect').value)||0;
+  if(qFrac>0) melodyEvents=quantizeEvents(melodyEvents,bpm,qFrac);
+  document.getElementById('btnMelodyRec').classList.remove('recording');
+  document.getElementById('btnMelodyRec').innerHTML=
+    `<svg viewBox="0 0 24 24" style="fill:white;stroke:white"><circle cx="12" cy="12" r="8"/></svg> Rekam Melodi`;
+  document.getElementById('btnMelodyStop').disabled=true;
+  document.getElementById('melodyRecBadge').classList.remove('active');
+  document.getElementById('melodyRecLabel').textContent=melodyEvents.length+' not';
+  document.getElementById('melodyTimer').classList.remove('active');
+  if(melodyEvents.length>0){document.getElementById('btnMelodyExport').disabled=false;renderNoteRoll();}
+}
+
+function renderNoteRoll(){
+  const track=document.getElementById('noteRollTrack');
+  if(!melodyEvents.length){track.innerHTML='';return;}
+  const totalDur=Math.max(...melodyEvents.map(e=>e.t_off||0)); if(totalDur<=0) return;
+  const typeColor={fund:'#ffd700',harm:'#a889ff',other:'#00f5c4'};
+  track.innerHTML=melodyEvents.map(e=>{
+    const left=(e.t_on/totalDur*100).toFixed(2);
+    const width=Math.max(0.5,(e.t_off-e.t_on)/totalDur*100).toFixed(2);
+    const color=typeColor[e.type]||'#00f5c4';
+    const fl=e.freq>=1000?(e.freq/1000).toFixed(1)+'k':Math.round(e.freq)+'';
+    return`<div class="note-pill" style="left:${left}%;width:${width}%;
+      background:${color}22;border:1px solid ${color}88;color:${color}">${fl}</div>`;
+  }).join('');
+}
+
+function exportMelodyWAV(){
+  if(!melodyEvents.length) return;
+  const SR=44100,vol=parseFloat(document.getElementById('volSlider').value);
+  const sustain=parseFloat(document.getElementById('sustainSlider').value);
+  const totalDur=Math.max(...melodyEvents.map(e=>e.t_off||0))+sustain+0.1;
+  const buf=new Float32Array(Math.ceil(SR*totalDur));
+  melodyEvents.forEach(ev=>{
+    const noteDur=ev.t_off-ev.t_on,i_on=Math.floor(ev.t_on*SR);
+    const i_end=Math.min(buf.length,Math.ceil((ev.t_on+noteDur+sustain+0.02)*SR));
+    for(let i=i_on;i<i_end;i++){
+      const t=(i-i_on)/SR;
+      const env=Math.min(1,t/0.012)*(t>noteDur?Math.max(0,1-(t-noteDur)/sustain):1);
+      buf[i]+=Math.sin(2*Math.PI*ev.freq*(ev.t_on+t))*vol*env;
+    }
+  });
+  for(let i=0;i<buf.length;i++){const x=buf[i];buf[i]=x/(1+Math.abs(x)*.3);}
+  const src=document.getElementById('srcName').textContent.replace(/[^a-z0-9]/gi,'_').slice(0,30)||'melody';
+  downloadWAV(buf,SR,`${src}_keyboard_${new Date().toISOString().slice(0,10)}.wav`);
+  const btn=document.getElementById('btnMelodyExport'),orig=btn.innerHTML;
+  btn.innerHTML=`<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Tersimpan!`;
+  setTimeout(()=>btn.innerHTML=orig,2500);
+}
+
+// ══════════════════════════════════════════════
+// PIANO ROLL EDITOR
+// ══════════════════════════════════════════════
+document.getElementById('prBarsSlider').addEventListener('input',function(){
+  prBars=parseInt(this.value);
+  document.getElementById('prBarsVal').textContent=prBars;
+  drawPianoRoll();
+});
+
+function buildPianoRoll(){
+  prNotes=[];
+  renderPrFreqLabels(); drawPianoRoll();
+  document.getElementById('btnPrExport').disabled=true;
+}
+
+function renderPrFreqLabels(){
+  const c=document.getElementById('prFreqLabels');
+  c.innerHTML=melodyFreqs.map((k,i)=>{
+    const fl=k.freq>=1000?(k.freq/1000).toFixed(1)+'k':Math.round(k.freq)+'';
+    const cls=k.type==='fund'?'fund-row':k.type==='harm'?'harm-row':'';
+    return`<div class="pr-freq-label ${cls}" style="height:${prCellH}px"
+      onclick="previewFreq(${k.freq})" title="${k.freq} Hz">
+      ${fl}<br><span style="opacity:.6;font-size:8px">${k.note}</span>
+    </div>`;
+  }).join('');
+}
+
+function drawPianoRoll(){
+  const cvs=document.getElementById('prCanvas');
+  const bpm=parseInt(document.getElementById('bpmSlider').value);
+  const sig=parseInt(document.getElementById('timeSigSelect').value);
+  const subdivs=4, totalCols=prBars*sig*subdivs;
+  const nRows=melodyFreqs.length; if(!nRows) return;
+  const dpr=window.devicePixelRatio||1;
+  const dispW=cvs.parentElement.offsetWidth||800;
+  const dispH=nRows*prCellH;
+  cvs.width=dispW*dpr; cvs.height=dispH*dpr; cvs.style.height=dispH+'px';
+  const ctx=cvs.getContext('2d'); ctx.scale(dpr,dpr);
+  prCellW=dispW/totalCols;
+  const typeColor={fund:'#ffd700',harm:'#a889ff',other:'#00f5c4'};
+
+  // rows
+  melodyFreqs.forEach((_,row)=>{
+    ctx.fillStyle=row%2===0?'#0d0f17':'#0a0c14';
+    ctx.fillRect(0,row*prCellH,dispW,prCellH);
+    ctx.fillStyle='rgba(30,35,51,.8)'; ctx.fillRect(0,(row+1)*prCellH-1,dispW,1);
+  });
+
+  // grid lines
+  for(let col=0;col<=totalCols;col++){
+    const x=col*prCellW;
+    const isBar=col%(sig*subdivs)===0, isBeat=col%subdivs===0;
+    ctx.fillStyle=isBar?'rgba(255,255,255,.12)':isBeat?'rgba(255,255,255,.05)':'rgba(255,255,255,.02)';
+    ctx.fillRect(x,0,isBar?2:1,dispH);
+    if(isBar){
+      ctx.fillStyle='rgba(90,96,128,.7)'; ctx.font='9px Space Mono'; ctx.textAlign='left';
+      ctx.fillText('B'+(col/(sig*subdivs)+1),x+3,11);
+    }
+  }
+
+  // notes
+  prNotes.forEach(n=>{
+    const x=n.beatStart*prCellW, w=Math.max(prCellW*.5,n.beatDur*prCellW-2);
+    const y=n.row*prCellH+3, h=prCellH-6;
+    const c=typeColor[melodyFreqs[n.row]?.type]||'#00f5c4';
+    ctx.fillStyle=c+'33'; ctx.strokeStyle=c+'cc'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.roundRect(x+1,y,w,h,3); ctx.fill(); ctx.stroke();
+    if(w>24){
+      ctx.fillStyle=c; ctx.font='bold 9px Space Mono'; ctx.textAlign='left';
+      const fl=melodyFreqs[n.row].freq>=1000?(melodyFreqs[n.row].freq/1000).toFixed(1)+'k':Math.round(melodyFreqs[n.row].freq)+'';
+      ctx.fillText(fl,x+4,y+h/2+3);
+    }
+  });
+
+  cvs.onmousedown=e=>prMouseDown(e,cvs,totalCols,subdivs);
+  cvs.onmousemove=e=>prMouseMove(e,cvs,totalCols,subdivs);
+  cvs.onmouseup=()=>{prDragging=null;};
+  cvs.oncontextmenu=e=>{e.preventDefault();prRightClick(e,cvs,totalCols,subdivs);};
+}
+
+function getGridPos(e,cvs,totalCols){
+  const rect=cvs.getBoundingClientRect();
+  const x=(e.clientX-rect.left)*(cvs.width/(window.devicePixelRatio||1)/rect.width);
+  const y=(e.clientY-rect.top)*(cvs.height/(window.devicePixelRatio||1)/rect.height);
+  return{
+    col:Math.max(0,Math.min(Math.floor(x/prCellW),totalCols-1)),
+    row:Math.max(0,Math.min(Math.floor(y/prCellH),melodyFreqs.length-1))
+  };
+}
+
+function prMouseDown(e,cvs,totalCols,subdivs){
+  if(e.button===2) return;
+  const {col,row}=getGridPos(e,cvs,totalCols);
+  const existing=prNotes.find(n=>n.row===row&&col>=n.beatStart&&col<n.beatStart+n.beatDur);
+  if(existing){prDragging=existing;return;}
+  const note={row,beatStart:col,beatDur:1};
+  prNotes.push(note); prDragging=note;
+  previewFreq(melodyFreqs[row]?.freq);
+  document.getElementById('btnPrExport').disabled=false;
+  drawPianoRoll();
+}
+function prMouseMove(e,cvs,totalCols,subdivs){
+  if(!prDragging) return;
+  const {col}=getGridPos(e,cvs,totalCols);
+  prDragging.beatDur=Math.max(1,col-prDragging.beatStart+1);
+  drawPianoRoll();
+}
+function prRightClick(e,cvs,totalCols,subdivs){
+  const {col,row}=getGridPos(e,cvs,totalCols);
+  const idx=prNotes.findIndex(n=>n.row===row&&col>=n.beatStart&&col<n.beatStart+n.beatDur);
+  if(idx>=0){prNotes.splice(idx,1);drawPianoRoll();}
+  if(!prNotes.length) document.getElementById('btnPrExport').disabled=true;
+}
+
+function previewFreq(freq){
+  if(!freq) return;
+  const ctx=getPlayCtx(),vol=parseFloat(document.getElementById('volSlider').value)*.5;
+  const osc=ctx.createOscillator(),gain=ctx.createGain();
+  osc.type='sine'; osc.frequency.value=freq;
+  gain.gain.setValueAtTime(0,ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(vol,ctx.currentTime+0.01);
+  gain.gain.setValueAtTime(vol,ctx.currentTime+0.15);
+  gain.gain.linearRampToValueAtTime(0,ctx.currentTime+0.25);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(); osc.stop(ctx.currentTime+0.26);
+}
+
+function clearPianoRoll(){
+  prNotes=[]; drawPianoRoll();
+  document.getElementById('btnPrExport').disabled=true;
+}
+
+function togglePianoRollPlay(){prPlaying?stopPianoRollPlay():startPianoRollPlay();}
+
+function startPianoRollPlay(){
+  if(!prNotes.length) return;
+  stopSine(); stopChord(); prPlaying=true; prPlayStart=Date.now();
+  const bpm=parseInt(document.getElementById('bpmSlider').value);
+  const sig=parseInt(document.getElementById('timeSigSelect').value);
+  const subdivs=4, secPerSubdiv=(60/bpm)/subdivs;
+  const totalCols=prBars*sig*subdivs, totalSec=totalCols*secPerSubdiv;
+  const vol=parseFloat(document.getElementById('volSlider').value);
+  const ctx=getPlayCtx(); prPlayOscs=[];
+  prNotes.forEach(n=>{
+    const freq=melodyFreqs[n.row]?.freq; if(!freq) return;
+    const t_on=n.beatStart*secPerSubdiv, noteDur=n.beatDur*secPerSubdiv;
+    const sustain=Math.min(0.3,noteDur*.15);
+    const osc=ctx.createOscillator(),gain=ctx.createGain();
+    osc.type='sine'; osc.frequency.value=freq;
+    const abs=ctx.currentTime+t_on;
+    gain.gain.setValueAtTime(0,abs);
+    gain.gain.linearRampToValueAtTime(vol,abs+0.012);
+    gain.gain.setValueAtTime(vol,abs+noteDur-sustain);
+    gain.gain.linearRampToValueAtTime(0,abs+noteDur);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(abs); osc.stop(abs+noteDur+0.01);
+    prPlayOscs.push(osc);
+  });
+  document.getElementById('btnPrPlay').innerHTML=
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop`;
+  function animPR(){
+    drawPianoRoll();
+    const elapsed=(Date.now()-prPlayStart)/1000;
+    const bpmNow=parseInt(document.getElementById('bpmSlider').value);
+    const sigNow=parseInt(document.getElementById('timeSigSelect').value);
+    const totCols=prBars*sigNow*subdivs;
+    const curBeat=elapsed*(bpmNow/60)*subdivs;
+    const x=(curBeat%totCols)*prCellW;
+    const ph=document.getElementById('prPlayhead');
+    ph.style.display='block'; ph.style.left=(68+x)+'px';
+    if(elapsed>totalSec){stopPianoRollPlay();return;}
+    prPlayAnim=requestAnimationFrame(animPR);
+  }
+  prPlayAnim=requestAnimationFrame(animPR);
+  setTimeout(()=>{if(prPlaying)stopPianoRollPlay();},(totalSec+.2)*1000);
+}
+
+function stopPianoRollPlay(){
+  prPlaying=false;
+  prPlayOscs.forEach(o=>{try{o.stop();}catch(e){}});prPlayOscs=[];
+  if(prPlayAnim){cancelAnimationFrame(prPlayAnim);prPlayAnim=null;}
+  document.getElementById('prPlayhead').style.display='none';
+  document.getElementById('btnPrPlay').innerHTML=
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Play Roll`;
+  drawPianoRoll();
+}
+
+function exportPianoRollWAV(){
+  if(!prNotes.length) return;
+  const SR=44100,bpm=parseInt(document.getElementById('bpmSlider').value);
+  const sig=parseInt(document.getElementById('timeSigSelect').value);
+  const subdivs=4, secPerSubdiv=(60/bpm)/subdivs;
+  const totalCols=prBars*sig*subdivs, totalSec=totalCols*secPerSubdiv+0.5;
+  const vol=parseFloat(document.getElementById('volSlider').value);
+  const buf=new Float32Array(Math.ceil(SR*totalSec));
+  prNotes.forEach(n=>{
+    const freq=melodyFreqs[n.row]?.freq; if(!freq) return;
+    const t_on=n.beatStart*secPerSubdiv, noteDur=n.beatDur*secPerSubdiv;
+    const sustain=Math.min(0.3,noteDur*.15);
+    const i_on=Math.floor(t_on*SR), i_end=Math.min(buf.length,Math.ceil((t_on+noteDur+.02)*SR));
+    for(let i=i_on;i<i_end;i++){
+      const t=(i-i_on)/SR;
+      const env=Math.min(1,t/.012)*(t>noteDur-sustain?Math.max(0,1-(t-(noteDur-sustain))/sustain):1);
+      buf[i]+=Math.sin(2*Math.PI*freq*(t_on+t))*vol*env;
+    }
+  });
+  for(let i=0;i<buf.length;i++){const x=buf[i];buf[i]=x/(1+Math.abs(x)*.3);}
+  const src=document.getElementById('srcName').textContent.replace(/[^a-z0-9]/gi,'_').slice(0,30)||'melody';
+  downloadWAV(buf,SR,`${src}_pianoroll_${bpm}bpm_${new Date().toISOString().slice(0,10)}.wav`);
+  const btn=document.getElementById('btnPrExport'),orig=btn.innerHTML;
+  btn.innerHTML=`<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Tersimpan!`;
+  setTimeout(()=>btn.innerHTML=orig,2500);
+}
+
+// ══════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════
+function showError(msg){
+  const el=document.getElementById('errorMsg');
+  if(msg){document.getElementById('errorText').textContent=msg;el.classList.add('show');}
+  else el.classList.remove('show');
+}
+function setLoading(on,text='Memproses…'){
+  document.getElementById('loadingText').textContent=text;
+  document.getElementById('loading').classList.toggle('show',on);
+}
+function resetAll(){
+  audioBuffer=null; stopSine(); stopChord(); stopMetronome(); stopPianoRollPlay();
+  Object.keys(melodyOscs).forEach(k=>keyUp(k));
+  melodyFreqs=[]; melodyEvents=[]; melodyRecording=false; prNotes=[];
+  clearInterval(melodyTimerInt);
+  document.getElementById('melodyWrap').classList.remove('show');
+  chordFreqs=[]; lastMono=null; lastMonoSr=0;
+  document.getElementById('slideResult').innerHTML='';
+  document.getElementById('chordBar').classList.remove('show');
+  // clean up audio player
+  const audioEl = document.getElementById('jsonAudioPlayer');
+  if(audioEl.src && audioEl.src.startsWith('blob:')) URL.revokeObjectURL(audioEl.src);
+  audioEl.src = '';
+  document.getElementById('audioPlayerBar').style.display='none';
+  ['sourceInfo','waveformWrap','resultsWrap'].forEach(id=>document.getElementById(id).classList.remove('show'));
+  document.getElementById('analyzeBtn').disabled=true;
+  document.getElementById('rangeIndicator').classList.remove('show');
+  fileInput.value=''; showError(false); setLoading(false); resetRecUI();
+}
+window.addEventListener('resize',()=>{
+  if(audioBuffer){drawWaveform();if(document.getElementById('resultsWrap').classList.contains('show'))analyze();}
+});
+</script>
+</body>
+</html>
